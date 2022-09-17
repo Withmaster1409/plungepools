@@ -1,0 +1,3618 @@
+
+setClass(Class="mode_shape",
+         representation(
+           phi="matrix",
+           D2phi="matrix",
+           D3phi="matrix",
+           w_n="matrix"
+         )
+)
+
+setClass(Class="response",
+         representation(
+           disp="matrix",
+           Moment="matrix",
+           Shear="matrix"
+         )
+)
+
+setClass(Class="Spectral_response",
+         representation(
+           disp="array",
+           Moment="array",
+           Shear="array"
+         )
+)
+
+
+setClass(Class="Plunge_pool",
+         representation(
+           L_slab="numeric",
+           L="numeric",
+           hole="numeric",
+           dx="numeric",
+           c="numeric",
+           D="numeric",
+           Mesh="numeric",
+           moment_Cr='numeric',
+           pt='numeric',
+           K_f='numeric',
+           K_a='numeric',
+           mode_shape='mode_shape',
+           a="numeric",
+           R="numeric",
+           w_range="numeric",
+           Cpf_up="numeric",
+           CpM_up="numeric",
+           Integral_scale="numeric",
+           H='numeric',
+           m='numeric',
+           b='numeric',
+           EI='numeric',
+           N='numeric',
+           tw='numeric',
+           Y='numeric',
+           P_fail='numeric'
+         )
+)
+
+setClass(Class='solution',
+         representation(
+           CpM='numeric',
+           Cpf='numeric',
+           Sff='array',
+           s_r="Spectral_response",
+           r_M="response",
+           r_f="response",
+           n="Plunge_pool"
+         )
+)
+
+
+beta_solve<-function(N,modNmax,delta=0.00001,L){
+  N<-round(N)
+  print('calcuting the modal shapes ...')
+  beta=-delta/2
+  a=0
+  aaa=matrix(rep(0,modNmax),nrow=1)
+  Mat=matrix(rep(0,(3*N+2)*(3*N+2)),nrow=3*N+2,ncol = 3*N+2)
+
+  ii=0
+  while (ii<modNmax){
+    beta=beta+delta
+
+    Mat[1,1]=-1*sin (beta*L/(N+1))
+    Mat[1,2]=   sinh(beta*L/(N+1))
+
+
+    Mat[2,1]=-1*cos (beta*L/(N+1))
+    Mat[2,2]=   cosh(beta*L/(N+1))
+    Mat[2,3]=+1
+    Mat[2,5]=-1
+
+    Mat[3,1]=   sin (beta*L/(N+1))
+    Mat[3,2]=   sinh(beta*L/(N+1))
+    Mat[3,4]=-2
+
+    for (i in seq(1,N-1)){
+
+      Mat[3*i+1  ,3*i  ]=-1*sin (beta*L/(N+1))
+      Mat[3*i+1  ,3*i+1]=-1*cos (beta*L/(N+1))+cosh(beta*L/(N+1))
+      Mat[3*i+1  ,3*i+2]=   sinh(beta*L/(N+1))
+
+      Mat[3*i+2,3*i  ]=-1*cos (beta*L/(N+1))
+      Mat[3*i+2,3*i+1]=   sin (beta*L/(N+1))+sinh(beta*L/(N+1))
+      Mat[3*i+2,3*i+2]=   cosh(beta*L/(N+1))
+      Mat[3*i+2,3*i+3]=+1
+      Mat[3*i+2,3*i+5]=-1
+
+      Mat[3*i+3,3*i  ]=   sin (beta*L/(N+1))
+      Mat[3*i+3,3*i+1]=   cos (beta*L/(N+1))+cosh(beta*L/(N+1))
+      Mat[3*i+3,3*i+2]=   sinh(beta*L/(N+1))
+      Mat[3*i+3,3*i+4]=   -2
+
+
+    }
+    i=N
+    Mat[3*i+1  ,3*i  ]=-1*sin (beta*L/(N+1))
+    Mat[3*i+1  ,3*i+1]=-1*cos (beta*L/(N+1))+cosh(beta*L/(N+1))
+    Mat[3*i+1  ,3*i+2]=   sinh(beta*L/(N+1))
+
+    Mat[3*i+2  ,3*i  ]=  sin (beta*L/(N+1))
+    Mat[3*i+2  ,3*i+1]=  cos (beta*L/(N+1))+cosh(beta*L/(N+1))
+    Mat[3*i+2  ,3*i+2]=  sinh(beta*L/(N+1))
+
+    if (a*det(Mat)<0){
+      ii=ii+1
+      aaa[ii]=beta-delta/2
+    }
+    a=det (Mat)
+
+  }
+
+  CC=matrix(rep(0,(modNmax)*(4*N+5)),nrow=modNmax)
+
+  for (i in seq(1,modNmax)){
+
+    CC[i,1]=1
+    CC[i,2]=0
+    CC[i,3]=sin( aaa[i]*L/(N+1))/sinh( aaa[i]*L/(N+1))
+    CC[i,4]=0
+
+
+    CC[i,6]=sin( aaa[i]*L/(N+1))
+    CC[i,7]=(-1*CC[i,6]*(cos( aaa[i]*L/(N+1))-cosh( aaa[i]*L/(N+1)))-CC[i,1]*cos( aaa[i]*L/(N+1))*sin( aaa[i]*L/(N+1))+CC[i,3]*cosh( aaa[i]*L/(N+1))*sin( aaa[i]*L/(N+1)))/(sin( aaa[i]*L/(N+1))-sinh( aaa[i]*L/(N+1)))
+    CC[i,5]=(CC[i,1]*cos( aaa[i]*L/(N+1))-CC[i,3]*cosh( aaa[i]*L/(N+1))+CC[i,7])
+    CC[i,8]=CC[i,6]
+
+    for (j in seq(2,N-1)){
+      CC[i,j*4+2]=0.5*(CC[i,j*4-3]*sin( aaa[i]*L/(N+1))+CC[i,j*4-2]*cos( aaa[i]*L/(N+1))+CC[i,j*4-1]*sinh( aaa[i]*L/(N+1))+CC[i,j*4]*cosh( aaa[i]*L/(N+1)))
+      CC[i,j*4+4]=CC[i,j*4+2]
+      CC[i,j*4+3]=(-CC[i,j*4+2]*(cos( aaa[i]*L/(N+1))-cosh( aaa[i]*L/(N+1)))-CC[i,j*4-3]*cos( aaa[i]*L/(N+1))*sin( aaa[i]*L/(N+1))+CC[i,j*4-2]*sin( aaa[i]*L/(N+1))*(sin( aaa[i]*L/(N+1))+sinh( aaa[i]*L/(N+1)))+CC[i,j*4-1]*cosh( aaa[i]*L/(N+1))*sin( aaa[i]*L/(N+1)))/(sin( aaa[i]*L/(N+1))-sinh( aaa[i]*L/(N+1)))
+      CC[i,j*4+1]=CC[i,j*4+3]+CC[i,j*4-3]*cos( aaa[i]*L/(N+1))-CC[i,j*4-2]*sin( aaa[i]*L/(N+1))-CC[i,j*4-1]*cosh( aaa[i]*L/(N+1))-CC[i,j*4]*sinh( aaa[i]*L/(N+1))
+    }
+    j=N
+    CC[i,j*4+2]=0.5*(CC[i,j*4-3]*sin( aaa[i]*L/(N+1))+CC[i,j*4-2]*cos( aaa[i]*L/(N+1))+CC[i,j*4-1]*sinh( aaa[i]*L/(N+1))+CC[i,j*4]*cosh( aaa[i]*L/(N+1)))
+    CC[i,j*4+4]=CC[i,j*4+2]
+    CC[i,j*4+3]=-CC[i,j*4+2]*cosh( aaa[i]*L/(N+1))/sinh( aaa[i]*L/(N+1))
+    if (( aaa[i]*L/(N+1))-trunc(( aaa[i]*L/(N+1))/3.14)*3.14<0.01){
+      CC[i,j*4+1]=-CC[i,j*4+2]*cos ( aaa[i]*L/(N+1))/sin ( aaa[i]*L/(N+1))
+      CC[i,j*4+1]=-CC[i,j*4+1]/abs(CC[i,j*4+1])
+    }else{
+      CC[i,j*4+1]=-CC[i,j*4+2]*cos ( aaa[i]*L/(N+1))/sin ( aaa[i]*L/(N+1))
+    }
+    CC[i,j*4+5]= aaa[i]
+
+  }
+
+  return(CC)
+}
+
+phi_G<-function(Mesh,L_slab,modNmax,EI,roA,K){
+  phi  <-matrix(ncol=length(Mesh),nrow = modNmax)
+  D2phi<-matrix(ncol=length(Mesh),nrow = modNmax)
+  D3phi<-matrix(ncol=length(Mesh),nrow = modNmax)
+  w_n <-matrix(ncol=1,nrow = modNmax)
+  L   <-Mesh[length(Mesh)]
+  dx  <-Mesh[2]-Mesh[1]
+  if (L_slab>=L){
+    for (j in seq(1,modNmax)){
+      phi[j,]<-matrix(sqrt(2)*sin(pi*Mesh/L*j)/sqrt(L),nrow=1,ncol=length(Mesh))
+      D2phi[j,]<-matrix(-sqrt(2)*sin(pi*Mesh/L*j)*(pi/L*j)^2/sqrt(L),nrow=1,ncol=length(Mesh))
+      D3phi[j,]<-matrix(-sqrt(2)*cos(pi*Mesh/L*j)*(pi/L*j)^3/sqrt(L),nrow=1,ncol=length(Mesh))
+      w_n[j,1]  =matrix((j*pi/L)^2*sqrt(EI/roA),nrow=1,ncol = 1)
+    }
+  }else{
+    N<-L/L_slab-1
+    C<-beta_solve (N,modNmax,0.00001,L)
+    xx<-seq(0,L_slab,length.out=L_slab/dx+1)
+
+    for (modN in seq(1,modNmax)){
+      for (i in seq(1,N+1)){
+        i_range=seq(round((i-1)*L_slab/dx+1),round((i)*L_slab/dx+1))
+        phi  [modN,i_range]<-matrix(C[modN,(i-1)*4+1]*sin(C[modN,N*4+5]*xx)+C[modN,(i-1)*4+2]*cos(C[modN,N*4+5]*xx)+C[modN,(i-1)*4+3]*sinh(C[modN,N*4+5]*xx)+C[modN,(i-1)*4+4]*cosh(C[modN,N*4+5]*xx),ncol=1)
+        D2phi[modN,i_range]<-matrix( (-1*C[modN,(i-1)*4+1]*sin(C[modN,N*4+5]*xx)-C[modN,(i-1)*4+2]*cos(C[modN,N*4+5]*xx)+C[modN,(i-1)*4+3]*sinh(C[modN,N*4+5]*xx)+C[modN,(i-1)*4+4]*cosh(C[modN,N*4+5]*xx))*C[modN,N*4+5]^2/N^2,ncol=1)
+        D3phi[modN,i_range]<-matrix(-(-1*C[modN,(i-1)*4+1]*cos(C[modN,N*4+5]*xx)+C[modN,(i-1)*4+2]*sin(C[modN,N*4+5]*xx)+C[modN,(i-1)*4+3]*cosh(C[modN,N*4+5]*xx)+C[modN,(i-1)*4+4]*sinh(C[modN,N*4+5]*xx))*C[modN,N*4+5]^3/N^3,ncol=1)
+      }
+    }
+
+    NN<-dim(phi)
+    M=rep(0,NN[1])
+    for (i in seq(1,NN[1])){
+      M[i]=sum(phi[i,]*phi[i,]*dx)
+    }
+
+    for (modN in seq(1,modNmax)){
+      beta=C[modN,N*4+5]
+      w_n[modN]=sqrt((beta^4*EI+K)/roA)
+      phi[modN,]  =  phi[modN,]/sqrt(M[modN])*sqrt(L)
+      D2phi[modN,]=D2phi[modN,]/sqrt(M[modN])*sqrt(L)
+      D3phi[modN,]=D3phi[modN,]/sqrt(M[modN])*sqrt(L)
+    }
+
+
+  }
+
+  new_mode_shape<-new("mode_shape",
+                      phi=phi,
+                      D2phi=D2phi,
+                      D3phi=D3phi,
+                      w_n=w_n
+  )
+
+  return(new_mode_shape)
+}
+
+Cpf_up_UJ<-function(Cpfmax,x_p,r,Mesh,bb)
+{
+  if (bb==1){
+    Cpf_up=Cpfmax*exp(-3*((Mesh-x_p)/r)^2)
+  }else{
+    Cpf_up=rep(Cpfmax,length(Mesh))
+  }
+  return(Cpf_up)
+}
+
+CpM_up_UJ<-function(CpMmax,x_p,r,Mesh,bb,Y){
+  if (bb==1){
+    CpM_up=CpMmax*exp(-3*((Mesh-x_p)/r)^2)+Y*98150
+  }else{
+    CpM_up=rep(CpMmax,length(Mesh))
+  }
+  return(CpM_up)
+}
+
+Gcalc<-function(n){
+  print('defining the displacement response matrix...')
+  G<-array(0,dim=c(length(n@Mesh),length(n@Mesh),length(n@w_range)))
+  j<-0
+  pb <- txtProgressBar(min = 0,      # Minimum value of the progress bar
+                       max = length(n@mode_shape@w_n), # Maximum value of the progress bar
+                       style = 3,    # Progress bar style (also available style = 1 and style = 2)
+                       width = 50,   # Progress bar width. Defaults to getOption("width")
+                       char = "=")   # Character used to create the bar
+
+  for (w_j in n@mode_shape@w_n){
+    j<-j+1
+    i=0
+    for (w in n@w_range){
+      i<-i+1
+      G[,,i]<-array((n@mode_shape@phi[j,])%*%t(n@mode_shape@phi[j,])/n@m/n@L/(complex(real = (-w^2+w_j^2), imaginary = (n@c*w*w_j))),dim=c(length(n@Mesh),length(n@Mesh)))+array(G[,,i],dim=c(length(n@Mesh),length(n@Mesh)))
+    }
+    setTxtProgressBar(pb, j)
+  }
+  close(pb)
+  return(G)
+}
+
+GMcalc<-function(n){
+  print('defining the moment response matrix...')
+  GM<-array(0,dim=c(length(n@Mesh),length(n@Mesh),length(n@w_range)))
+  j<-0
+  pb <- txtProgressBar(min = 0,      # Minimum value of the progress bar
+                       max = length(n@mode_shape@w_n), # Maximum value of the progress bar
+                       style = 3,    # Progress bar style (also available style = 1 and style = 2)
+                       width = 50,   # Progress bar width. Defaults to getOption("width")
+                       char = "=")   # Character used to create the bar
+  for (w_j in n@mode_shape@w_n){
+    j<-j+1
+    i=0
+    for (w in n@w_range){
+      i<-i+1
+      GM[,,i]<-array((n@mode_shape@D2phi[j,])%*%t(n@mode_shape@phi[j,])*n@EI/n@m/n@L/(complex(real = (-w^2+w_j^2), imaginary = (n@c*w*w_j))),dim=c(length(n@Mesh),length(n@Mesh)))+array(GM[,,i],dim=c(length(n@Mesh),length(n@Mesh)))
+    }
+    setTxtProgressBar(pb, j)
+  }
+  close(pb)
+  return(GM)
+}
+
+GScalc<-function(n){
+  print('defining the shear response matrix...')
+  GS<-array(0,dim=c(length(n@Mesh),length(n@Mesh),length(n@w_range)))
+  j<-0
+  pb <- txtProgressBar(min = 0,      # Minimum value of the progress bar
+                       max = length(n@mode_shape@w_n), # Maximum value of the progress bar
+                       style = 3,    # Progress bar style (also available style = 1 and style = 2)
+                       width = 50,   # Progress bar width. Defaults to getOption("width")
+                       char = "=")   # Character used to create the bar
+  for (w_j in n@mode_shape@w_n){
+    j<-j+1
+    i=0
+    for (w in n@w_range){
+      i<-i+1
+      GS[,,i]<-array((n@mode_shape@D3phi[j,])%*%t(n@mode_shape@phi[j,])*n@EI/n@m/n@L/(complex(real = (-w^2+w_j^2), imaginary = (n@c*w*w_j))),dim=c(length(n@Mesh),length(n@Mesh)))+array(GS[,,i],dim=c(length(n@Mesh),length(n@Mesh)))
+    }
+    setTxtProgressBar(pb, j)
+  }
+  close(pb)
+  return(GS)
+}
+
+
+KcalcQR<-function(n,Q,R,Mesh){
+  EI=n@EI
+  Hing<-n@Mesh[n@Mesh %% n@L_slab < n@dx/2]
+  Hing<-Hing[c(-1,-length(Hing))]
+  K  <-matrix(0,nrow = 2*length(Mesh),ncol = 2*length(Mesh))
+  j=seq(4)
+  for (i in seq(length(Mesh)-1)){
+    L=Mesh[i+1]-Mesh[i]
+    if (is.element(Mesh[i+1],Hing)){
+      K[j,j]  <-K[j,j]  +3*EI/L^3*matrix(c(1,L,-1,0,L,L^2,-L,0,-1,-L,1,0,0,0,0,0),nrow = 4,ncol = 4)
+      if ((Q[j[1]]-R[j[1]])<0){
+        K[j,j]  <-K[j,j]  +n@K_a*L/420*matrix(c(156,22*L,54,-13*L^2,22*L,4*L^2,13*L,-13*L^2,54,13*L,156,-22*L^2,-13*L^2,-13*L^2,-22*L^2,4*L^2),nrow = 4,ncol = 4)
+      }else{
+        K[j,j]<-K[j,j]    +n@K_f*L/420*matrix(c(156,22*L,54,-13*L^2,22*L,4*L^2,13*L,-13*L^2,54,13*L,156,-22*L^2,-13*L^2,-13*L^2,-22*L^2,4*L^2),nrow = 4,ncol = 4)
+      }
+    }else{
+      K[j,j]  <-K[j,j]  +3*EI/L^3*matrix(c(12,6*L,-12,6*L,6*L,4*L^2,-6*L,2*L^2,-12,-6*L,12,-6*L,6*L,2*L^2,-6*L,4*L^2),nrow = 4,ncol = 4)
+      if ((Q[j[1]]-R[j[1]])<0){
+        K[j,j]  <-K[j,j]  +n@K_a*L/420*matrix(c(156,22*L,54,-13*L^2,22*L,4*L^2,13*L,-13*L^2,54,13*L,156,-22*L^2,-13*L^2,-13*L^2,-22*L^2,4*L^2),nrow = 4,ncol = 4)
+      }else{
+        K[j,j]<-K[j,j]    +n@K_f*L/420*matrix(c(156,22*L,54,-13*L^2,22*L,4*L^2,13*L,-13*L^2,54,13*L,156,-22*L^2,-13*L^2,-13*L^2,-22*L^2,4*L^2),nrow = 4,ncol = 4)
+      }
+    }
+    j=j+2
+  }
+  return(K)
+}
+
+Kcalc<-function(n,P,Mesh){
+  EI=n@EI
+  Hing<-n@Mesh[n@Mesh %% n@L_slab < n@dx/2]
+  Hing<-Hing[c(-1,-length(Hing))]
+  K  <-matrix(0,nrow = 2*length(Mesh),ncol = 2*length(Mesh))
+  j=seq(4)
+  for (i in seq(length(Mesh)-1)){
+
+    L=Mesh[i+1]-Mesh[i]
+    if (is.element(Mesh[i+1],Hing)){
+      K[j,j]  <-K[j,j]+
+        3*EI/L^3*matrix(c(1,L,-1,0,L,L^2,-L,0,-1,-L,1,0,0,0,0,0),nrow = 4,ncol = 4)+
+        (P[i]*n@K_f+(1-P[i])*n@K_a)*L/420*matrix(c(156,22*L,54,-13*L^2,22*L,4*L^2,13*L,-13*L^2,54,13*L,156,-22*L^2,-13*L^2,-13*L^2,-22*L^2,4*L^2),nrow = 4,ncol = 4)
+    }else{
+      K[j,j]  <-K[j,j]+
+        3*EI/L^3*matrix(c(12,6*L,-12,6*L,6*L,4*L^2,-6*L,2*L^2,-12,-6*L,12,-6*L,6*L,2*L^2,-6*L,4*L^2),nrow = 4,ncol = 4)+
+        (P[i]*n@K_f+(1-P[i])*n@K_a)*L/420*matrix(c(156,22*L,54,-13*L^2,22*L,4*L^2,13*L,-13*L^2,54,13*L,156,-22*L^2,-13*L^2,-13*L^2,-22*L^2,4*L^2),nrow = 4,ncol = 4)
+    }
+    j=j+2
+  }
+  return(K)
+}
+
+
+
+random_initialize <- function(L_slab_min=5,
+                              L_slab_max=25,
+                              min_number_of_slabs=1,
+                              max_number_of_slabs=20,
+                              L_min=60,
+                              L_max=501,
+                              N_holes=0,
+                              c_min=0,
+                              c_max=0.5,
+                              D_min=1,
+                              D_max=5,
+                              modNmax=30,
+                              min_a=100,
+                              max_a=1000,
+                              min_R=5,
+                              max_R=800,
+                              min_HH=100,
+                              max_HH=200,
+                              Cpf_max_min=0,
+                              Cpf_max_max=0.25,
+                              CpM_max_min=0,
+                              CpM_max_max=0.8,
+                              tw=0,
+                              xp_min=0.2,
+                              xp_max=0.8,
+                              r_min=0.2,
+                              r_max=0.4,
+                              min_Y=5,
+                              max_Y=50,
+                              nonlinear=FALSE,
+                              P_fail_min=0,
+                              P_fail_max=1
+)
+{
+  L_range<-NULL
+
+
+  while(length(L_range)==0){
+
+
+    number_of_slabs=seq(min_number_of_slabs,max_number_of_slabs,by=2)
+    L_slab_range=seq(L_slab_min,L_slab_max,by=round((L_slab_max-L_slab_min)/30,1))
+
+    #define the slabs' lentgh
+    if (L_slab_max<L_min/max_number_of_slabs){
+      L_slab<-L_min/max_number_of_slabs
+    }else{
+      L_slab<-L_slab_range[[sample(1:length(L_slab_range), 1)]]
+    }
+
+    L_range<- L_slab*number_of_slabs
+    L_range<- L_range[L_range>=L_min & L_range<=L_max]
+  }
+  #define the pool's length
+  L<-L_range[[sample(1:length(L_range), 1)]]
+
+  Ntmp<-round(100*L_slab/L)
+  dx<-L_slab/Ntmp
+
+
+  nn_range<-c(1/c(20,15,10,5,3,2),c(1,2,3,5,10,15,20))
+  nn<-nn_range[[sample(1:length(nn_range), 1)]]
+  if (nonlinear){
+    nn_range2<-seq(100,10000,by=100)
+    nn2<-nn_range2[[sample(1:length(nn_range2), 1)]]
+  }else{
+    nn2=1
+  }
+
+  c<-runif(1,min=c_min,max=c_max)
+
+  D<-round(runif(1,min=D_min,max=D_max),1)
+
+  Mesh<-seq(0,L,by=dx)
+
+  p_fail<-runif(1,min=P_fail_min,max=P_fail_max)
+
+  pt<-rep(0,length(Mesh))
+  pt[seq(1,length(Mesh),by=L_slab/dx)]<-p_fail
+
+
+
+  holes_i<-(round(seq(1,length(Mesh),length.out=N_holes+2)))
+  holes_i<-head(holes_i[-1],-1)
+  hole<-Mesh[holes_i]
+
+  pt[holes_i]<-1
+
+  b=1
+
+  E=25*10^9
+  I=1/12*b*D^3
+  EI=E*I
+  K_a=EI/dx^3/nn
+  K_f=nn2*K_a
+
+  m=15000*b*D
+
+  moment_Cr<-rep(sqrt(runif(1,min=20,max=30))*0.62*10^6*b/6*D^2,length(Mesh))
+
+  if (K_f==K_a){
+    mode_shape<-phi_G(Mesh,L_slab,modNmax,EI,m,K_a)
+  }else{
+    mode_shape<-phi_G(Mesh,L_slab,modNmax,EI,m,K_a)
+  }
+
+  a<-runif(1,min=min_a,max=max_a)
+  R<-runif(1,min=min_R,max=max_R)
+  RLa=R*L/a
+
+  HH<-round(runif(1,min=min_HH,max=max_HH)*2)/2
+  Y<-round(runif(1,min=min_Y,max=min(max_Y,HH/2)*2))/2
+  if (tw==0){
+    tw=runif(1,min=0.5,max=0.9)*Y
+  }
+
+  if (max_Y!=min_Y){
+    Cpf_max_max<-Cpf_max_max*(1-((Y-min_Y)/(max_Y-min_Y)))
+    CpM_max_max<-CpM_max_max*(1-((Y-min_Y)/(max_Y-min_Y)))
+  }
+
+  Cpf_max<-runif(1,min=Cpf_max_min*(HH-Y)*98150,max = Cpf_max_max*(HH-Y)*98150)
+  CpM_max<-runif(1,min=CpM_max_min*(HH-Y)*98150,max = CpM_max_max*(HH-Y)*98150)
+
+  xp<-runif(1,min=xp_min*L,max=xp_max*L)
+  r<-runif(1,min=r_min*L,max=r_max*L)
+
+  Integral_scale=r/4*1.6
+
+  w_range=c(seq(0.1,1,by=0.025),seq(2,10,by=0.1),seq(20,100,by=2),seq(200,500,by=30))
+  w_range=w_range*2*pi;
+  Pttt=0.95;
+
+  Cpf_up<-Cpf_up_UJ(Cpf_max,xp,r,Mesh,1);
+  CpM_up<-CpM_up_UJ(CpM_max,xp,r,Mesh,1,Y);
+
+  #define outputs
+  new_plungepool<-new("Plunge_pool",
+                      L_slab=L_slab,
+                      L=L,
+                      hole=hole,
+                      dx=dx,
+                      c=c,
+                      D=D,
+                      Mesh=Mesh,
+                      moment_Cr=moment_Cr,
+                      pt=pt,
+                      K_f=K_f,
+                      K_a=K_a,
+                      mode_shape=mode_shape,
+                      a=a,
+                      R=R,
+                      w_range=w_range,
+                      Cpf_up=Cpf_up,
+                      CpM_up=CpM_up,
+                      Integral_scale=Integral_scale,
+                      H=HH,
+                      m=m,
+                      b=b,
+                      EI=EI,
+                      N=L/L_slab,
+                      tw=tw,
+                      Y=Y,
+                      P_fail=p_fail
+  )
+
+  return(new_plungepool)
+
+}
+
+CpMcalc<-function(Cr,n,drained=F){
+
+
+  CpM_down=rep(0,length(n@Mesh))
+  Cr_i=match(Cr,n@Mesh)
+
+
+  if (length(Cr)>0){
+    for (i in seq(1,Cr_i[1])){
+      if (drained){
+        CpM_down[i]=(n@tw)*98150-((n@tw)*98150-n@CpM_up[Cr_i[1]])*(i)/(Cr_i[1])
+      }else{
+        CpM_down[i]=n@CpM_up[Cr_i[1]]
+      }
+    }
+    if (length(Cr)>1){
+      for (j in seq(2,length(Cr))){
+        for (i in seq(Cr_i[j-1],Cr_i[j])){
+          CpM_down[i]=n@CpM_up[Cr_i[j-1]]-(n@CpM_up[Cr_i[j-1]]-n@CpM_up[Cr_i[j]])*(i-Cr_i[j-1])/(Cr_i[j]-Cr_i[j-1])
+        }
+      }
+    }
+    for (i in seq(Cr_i[length(Cr)],length(n@Mesh))){
+      CpM_down[i]=n@CpM_up[Cr_i[length(Cr)]]+(n@CpM_up[Cr_i[length(Cr)]]-n@tw*98150)*(i-Cr_i[length(Cr)])/(Cr_i[length(Cr)]-(length(n@Mesh)))
+    }
+  }else{
+    CpM_down=rep(n@tw,length(n@Mesh))
+  }
+  CpM=CpM_down-n@CpM_up;
+  return(CpM)
+}
+
+
+Fcalc<-function(Forces,Mesh){
+  F=matrix(rep(0,2*length(Mesh)),ncol = 1)
+  ii=1
+  for (i in seq(1,length(Mesh)-1)){
+    L=Mesh[i+1]-Mesh[i]
+    F[ii]  =F[ii]  -Forces[i]*L/2    -3*(Forces[i+1]-Forces[i])*L/20
+    F[ii+2]=F[ii+2]-Forces[i]*L/2    -7*(Forces[i+1]-Forces[i])*L/20
+    F[ii+1]=F[ii+1]-Forces[i]*L^2/12 -1*(Forces[i+1]-Forces[i])*L^2/30
+    F[ii+3]=F[ii+3]+Forces[i]*L^2/12 +1*(Forces[i+1]-Forces[i])*L^2/20
+    ii=ii+2
+  }
+  return(F)
+}
+
+
+Meancalc<-function(n,Forces){
+  lt<-length(n@Mesh)
+  ttt<-round(1000/lt)
+  dx<-n@dx
+  Mesh<-seq(0,n@L,by=dx/ttt)
+
+  Forces2=matrix(rep(0,length(Mesh)),ncol = 1)
+  for (i in seq(0,length(Forces)-2)){
+    for (j in seq(0,ttt-1)){
+      Forces2[i*ttt+j+1]=((ttt-j)/ttt)*Forces[i+1]+(j/ttt)*Forces[i+2];
+    }
+  }
+  Forces2[length(Forces2)]<-Forces[length(Forces)]
+
+  Hing<-n@Mesh[n@Mesh %% n@L_slab < n@dx/2]
+
+  Forces<-Fcalc(Forces2,Mesh)
+
+  U_in <-matrix(rep(+1e-59,2*length(Mesh)),nrow = 1)
+  U_out<-matrix(rep(-1e-59,2*length(Mesh)),nrow = 1)
+  sssss=rep(-1,length((Mesh)))
+  pb <- txtProgressBar(min = 0,      # Minimum value of the progress bar
+                       max = 100, # Maximum value of the progress bar
+                       style = 3,    # Progress bar style (also available style = 1 and style = 2)
+                       width = 50,   # Progress bar width. Defaults to getOption("width")
+                       char = "=")   # Character used to create the bar
+  P<-rep(0,length(Mesh))
+  itr<-1
+  while (sum(sssss>=0)/length(Mesh)<min(0.5+0.5/log(itr),0.99)){
+    U_in<-U_out
+    K<-Kcalc(n,P,Mesh)
+    U_out[1,c(seq(2,length(U_in)-2),length(U_in))]<-solve(K[c(seq(2,length(U_in)-2),length(U_in)),c(seq(2,length(U_in)-2),length(U_in))],(Forces[c(seq(2,length(U_in)-2),length(U_in)),1]),tol=0)
+    if (sum(is.nan(U_out))>0){
+      U_out<-U_in
+      break
+    }
+    itr<-itr+1
+    sssss<-sign((U_out[seq(1,length(U_out),by=2)])*(U_in[seq(1,length(U_in),by=2)]))
+
+    P[which(U_out >=0)]<-0
+    P[which(U_out < 0)]<-1
+
+    setTxtProgressBar(pb, round(sum(sssss>=0)/length(Mesh)*100/min(0.5+0.5/log(itr),0.99)))
+  }
+  setTxtProgressBar(pb, 100)
+  print('done!')
+
+  F1<-U_out%*%K-t(Forces)
+
+  disp  <-U_out[seq(1,length(U_out),by=2)]
+  Rota  <-U_out[seq(2,length(U_out),by=2)]
+  Shear <-F1[seq(1,length(U_out),by=2)]
+  Moment<-F1[seq(2,length(U_out),by=2)]
+
+  H_i<-seq(1,length(Mesh))
+  H_i<-H_i[Mesh %% n@L_slab < (Mesh[2]-Mesh[1])/2]
+
+  L=Mesh[2]-Mesh[1]
+  d=matrix(c(disp[1], Rota[1], disp[2], Rota[2]),ncol = 1)
+  B =matrix(c(-6/L^2,-4/L ,6/L^2  ,-2/L ),nrow=1)
+  C =matrix(c(12/L^3,6/L^2,-12/L^3,6/L^2),nrow=1)
+  Moment[1]=n@EI*B%*%d
+  Shear [1]=n@EI*C%*%d
+
+  for (i in seq(2,length(Mesh))){
+    L=Mesh[i]-Mesh[i-1]
+    d=matrix(c(disp[i-1], Rota[i-1], disp[i], Rota[i]),ncol = 1)
+    B=matrix(c(6/L^2,  2/L,  -6/L^2,  4/L),nrow = 1)
+    C=matrix(c(12/L^3, 6/L^2, -12/L^3, 6/L^2),nrow = 1)
+    if (is.element(Mesh[i],Mesh[H_i])){
+      Moment[i]=0
+      Shear [i]=Shear[i]
+    }else{
+      Moment[i]=n@EI*B%*%d
+      Shear [i]=n@EI*C%*%d
+    }
+  }
+
+
+  Shear=matrix(Shear[seq(1,length(Shear),by=ttt)],ncol=1)
+  Moment=matrix(Moment[seq(1,length(Moment),by=ttt)],ncol=1)
+  disp=matrix(disp[seq(1,length(disp),by=ttt)],nrow=1)
+  Rota=matrix(disp[seq(1,length(Rota),by=ttt)],nrow=1)
+
+  response<-new("response",
+                disp=disp,
+                Moment=Moment,
+                Shear=Shear
+  )
+  return (response)
+}
+
+
+MeanLcalc<-function(S,Forces){
+  n<-S@n
+  lt<-length(n@Mesh)
+  ttt<-round(1000/lt)
+  dx<-n@dx
+  Mesh<-seq(0,n@L,by=dx/ttt)
+
+  Forces2=matrix(rep(0,length(Mesh)),ncol = 1)
+  for (i in seq(0,length(Forces)-2)){
+    for (j in seq(0,ttt-1)){
+      Forces2[i*ttt+j+1]=((ttt-j)/ttt)*Forces[i+1]+(j/ttt)*Forces[i+2];
+    }
+  }
+  Forces2[length(Forces2)]<-Forces[length(Forces)]
+
+  Hing<-n@Mesh[n@Mesh %% n@L_slab < n@dx/2]
+
+  Forces<-Fcalc(Forces2,Mesh)
+
+  sd<-rep(NA,length(n@Mesh)*ttt-ttt+1)
+  sd[seq(1,length(Mesh),by=ttt)]<-S@r_f@disp
+  sd<-linterp(sd,max_allow = NULL)
+
+  U_in <-matrix(rep(+1e-59,2*length(Mesh)),nrow = 1)
+  U_out<-matrix(rep(-1e-59,2*length(Mesh)),nrow = 1)
+  sssss=rep(-1,length((Mesh)))
+  pb <- txtProgressBar(min = 0,      # Minimum value of the progress bar
+                       max = 100, # Maximum value of the progress bar
+                       style = 3,    # Progress bar style (also available style = 1 and style = 2)
+                       width = 50,   # Progress bar width. Defaults to getOption("width")
+                       char = "=")   # Character used to create the bar
+  P<-rep(0,length(Mesh))
+  itr<-1
+  E<- Inf
+  while (E>0.01){
+    U_in<-U_out
+    K<-Kcalc(n,P,Mesh)
+    U_out[1,c(seq(2,length(U_in)-2),length(U_in))]<-solve(K[c(seq(2,length(U_in)-2),length(U_in)),c(seq(2,length(U_in)-2),length(U_in))],(Forces[c(seq(2,length(U_in)-2),length(U_in)),1]),tol=0)
+    if (sum(is.nan(U_out))>0){
+      U_out<-U_in
+      break
+    }
+    itr<-itr+1
+    delta<-(U_out-U_in)/U_out
+    sssss<-sign((U_out[seq(1,length(U_out),by=2)])*(U_in[seq(1,length(U_in),by=2)]))
+    E<-sqrt(delta%*%t(delta)/length(Mesh))
+    print(E)
+    print(plot(1:length(P),P,type='l'))
+    P<-pnorm(0,mean=U_out[seq(1,length(U_out),by=2)],sd=sd)
+    setTxtProgressBar(pb, round(sum(sssss>=0)/length(Mesh)*100/min(0.5+0.5/log(itr),0.99)))
+  }
+  setTxtProgressBar(pb, 100)
+  print('done!')
+
+  F1<-U_out%*%K-t(Forces)
+
+  disp  <-U_out[seq(1,length(U_out),by=2)]
+  Rota  <-U_out[seq(2,length(U_out),by=2)]
+  Shear <-F1[seq(1,length(U_out),by=2)]
+  Moment<-F1[seq(2,length(U_out),by=2)]
+
+  H_i<-seq(1,length(Mesh))
+  H_i<-H_i[Mesh %% n@L_slab < (Mesh[2]-Mesh[1])/2]
+
+  L=Mesh[2]-Mesh[1]
+  d=matrix(c(disp[1], Rota[1], disp[2], Rota[2]),ncol = 1)
+  B =matrix(c(-6/L^2,-4/L ,6/L^2  ,-2/L ),nrow=1)
+  C =matrix(c(12/L^3,6/L^2,-12/L^3,6/L^2),nrow=1)
+  Moment[1]=n@EI*B%*%d
+  Shear [1]=n@EI*C%*%d
+
+  for (i in seq(2,length(Mesh))){
+    L=Mesh[i]-Mesh[i-1]
+    d=matrix(c(disp[i-1], Rota[i-1], disp[i], Rota[i]),ncol = 1)
+    B=matrix(c(6/L^2,  2/L,  -6/L^2,  4/L),nrow = 1)
+    C=matrix(c(12/L^3, 6/L^2, -12/L^3, 6/L^2),nrow = 1)
+    if (is.element(Mesh[i],Mesh[H_i])){
+      Moment[i]=0
+      Shear [i]=Shear[i]
+    }else{
+      Moment[i]=n@EI*B%*%d
+      Shear [i]=n@EI*C%*%d
+    }
+  }
+
+
+  Shear=matrix(Shear[seq(1,length(Shear),by=ttt)],ncol=1)
+  Moment=matrix(Moment[seq(1,length(Moment),by=ttt)],ncol=1)
+  disp=matrix(disp[seq(1,length(disp),by=ttt)],nrow=1)
+  Rota=matrix(disp[seq(1,length(Rota),by=ttt)],nrow=1)
+
+  response<-new("response",
+                disp=disp,
+                Moment=Moment,
+                Shear=Shear
+  )
+  return (response)
+}
+
+
+
+
+clc <- function() cat(rep("\n", 70))
+
+Sp<-function (S1,S2,n){
+  f<-n@w_range/2/pi
+  SS<-rep(0,length(f))
+  gama<-1/n@Integral_scale
+  I=n@Integral_scale
+
+  ind<-match(n@Mesh[abs(n@Mesh-S1)<.5*n@dx],n@Mesh)
+
+  if (S1==S2){
+    SS[f<25] =0.0254*n@Cpf_up[ind]^2*f[f<25] ^(-1  )*exp(gama*abs(S1-S2))
+    SS[f>=25]=1.8569*n@Cpf_up[ind]^2*f[f>=25]^(-7/3)*exp(gama*abs(S1-S2))
+  }else{
+    if (S1-S2<I){
+      SS=(I-S1+S2)/I*Sp(S1,S1,n);
+    }
+  }
+  return(SS)
+}
+
+Spcalc<-function(n){
+  Spp<-array(0,dim=c(length(n@Mesh),length(n@Mesh),length(n@w_range)))
+
+  i<-0
+  for (x1 in n@Mesh){
+    i<-i+1
+    j<-0
+    for (x2 in n@Mesh){
+      j<-j+1
+      k<-0
+      for (w in n@w_range){
+        K<-k+1
+        if ((abs(x1-x2)<n@Integral_scale) & (n@Cpf_up[i]>0.01)){
+          Spp[i,j,]<-array(Sp(x1,x2,n))
+        }else{
+          Spp[i,j,]<-array(rep(0,length(n@w_range)))
+        }
+      }
+    }
+  }
+  return(Spp)
+}
+
+H<-function(r,S,Cr,w,R,a,L){
+  teta=-atan (R/w)
+  beta=((w^2/a^2)^2+(R*w/a^2)^2)^0.25*(complex(real = sin(teta/2), imaginary = cos(teta/2)))
+
+  N=length(Cr)
+  Cr=sort(Cr)
+  ii=which(Cr==S)
+
+  if (r>S){
+    if (ii==N){
+      HH=matrix((cosh(beta*(L-r)))/(cosh(beta*(L-S))),ncol=1)
+    }else if (r<Cr[ii+1]){
+      HH=matrix(sinh(beta*(Cr[ii+1]-r))/sinh(beta*(Cr[ii+1]-Cr[ii])),ncol = 1)
+    }else{
+      HH=rep(0,length(w))
+    }
+  }else if (r<S){
+    if (ii==1){
+      HH=matrix(sinh(beta*r)/sinh(beta*Cr[1]),ncol=1)
+    }else if (r>Cr[ii-1]){
+      HH=matrix(sinh(beta*(r-Cr[ii-1]))/sinh(beta*(Cr[ii]-Cr[ii-1])),ncol=1)
+    }else{
+      HH=rep(0,length(w))
+    }
+  }else{
+    HH=rep(1,length(w))
+  }
+  return(HH)
+}
+
+Sf<-function(r1,r2,w,Cr,R,a,Spp,w_range,Mesh,Ht,Hs){
+
+  L=Mesh[length(Mesh)]
+  N=length(Cr)
+  Cr_i<-match(Cr,Mesh)
+
+  w_i <-match(w,w_range);
+  r1_i<-which(Mesh==r1);
+  r2_i<-which(Mesh==r2);
+
+  SS=0
+
+  if (N>0){
+    for (j in 1:N){
+      for (k in 1:N){
+        SS=SS+(Hs[r1_i,j,w_i])*(Ht[r2_i,k,w_i])*Spp[Cr_i[j],Cr_i[k],w_i]
+      }
+      SS=SS+Ht[r2_i,j,w_i]*Spp[r1_i,Cr_i[j],w_i]+(Hs[r1_i,j,w_i])*Spp[Cr_i[j],r2_i,w_i]
+    }
+  }
+  SS=SS+Spp[r1_i,r2_i,w_i]
+}
+
+
+Sffcalc<-function (Cr,n,Spp){
+  Ht <-array(0,dim=c(length(n@Mesh),length(Cr)    ,length(n@w_range)))
+  Hs <-array(0,dim=c(length(n@Mesh),length(Cr)    ,length(n@w_range)))
+  Sff<-array(0,dim=c(length(n@Mesh),length(n@Mesh),length(n@w_range)))
+  i<-0
+  for (r in n@Mesh){
+    i=i+1
+    j=0
+    for (s in Cr){
+      j=j+1
+      H<-H(r,s,Cr,n@w_range,n@R,n@a,n@L)
+      Ht[i,j,]<-H
+      Hs[i,j,] =Conj(H)
+    }
+  }
+  pb <- txtProgressBar(min = 0,      # Minimum value of the progress bar
+                       max = length(n@Mesh), # Maximum value of the progress bar
+                       style = 3,    # Progress bar style (also available style = 1 and style = 2)
+                       width = 50,   # Progress bar width. Defaults to getOption("width")
+                       char = "=")   # Character used to create the bar
+  i=0
+  for (x1 in n@Mesh){
+    setTxtProgressBar(pb, i+1)
+    i=i+1
+    j=0
+    for (x2 in n@Mesh){
+      j=j+1
+      Sff[i,j,] = Sf(x1,x2,n@w_range,Cr,n@R,n@a,Spp,n@w_range,n@Mesh,Ht,Hs);
+    }
+  }
+  print('done!')
+  return(Sff)
+}
+
+Varcalc<-function(S,w_range,Mesh){
+  Var=rep(0,length(Mesh))
+
+  for (i in 1:length(Mesh)){
+    for (k in 1:(length(w_range)-1)){
+      Var[i]=Var[i]+(S[i,i,k]+S[i,i,k+1])/2*(w_range[k+1]-w_range[k])
+    }
+  }
+  Var=sqrt(Mod(Var))
+  return(Var)
+}
+
+fluccalc<-function (Sff,n,G,GM,GS){
+  Syy=array(0,dim=c(length(n@Mesh),length(n@Mesh),length(n@w_range)))
+  Smm=array(0,dim=c(length(n@Mesh),length(n@Mesh),length(n@w_range)))
+  Sss=array(0,dim=c(length(n@Mesh),length(n@Mesh),length(n@w_range)))
+  dx=n@dx
+  pb <- txtProgressBar(min = 0,      # Minimum value of the progress bar
+                       max = length(n@Mesh), # Maximum value of the progress bar
+                       style = 3,    # Progress bar style (also available style = 1 and style = 2)
+                       width = 50,   # Progress bar width. Defaults to getOption("width")
+                       char = "=")   # Character used to create the bar
+  for (p in 1:length(n@Mesh)){
+    setTxtProgressBar(pb, p)
+    for (k in 1:length(n@w_range)){
+      A=(Conj(array(G [p,,k],dim=c(length(n@Mesh),1))))%*%(array(G [p,,k],dim=c(1,length(n@Mesh))))*Sff[,,k]*dx^2
+      Syy[p,p,k]=sum(A)
+      A=(Conj(array(GM[p,,k],dim=c(length(n@Mesh),1))))%*%(array(GM[p,,k],dim=c(1,length(n@Mesh))))*Sff[,,k]*dx^2
+      Smm[p,p,k]=sum(A)
+      A=(Conj(array(GS[p,,k],dim=c(length(n@Mesh),1))))%*%(array(GS[p,,k],dim=c(1,length(n@Mesh))))*Sff[,,k]*dx^2
+      Sss[p,p,k]=sum(A)
+    }
+  }
+  print('done!')
+  Spectral_response<-new("Spectral_response",
+                         disp=Syy,
+                         Moment=Smm,
+                         Shear=Sss
+  )
+
+
+  return (Spectral_response)
+}
+
+
+Mcalc<-function(n,Mesh){
+  M<-matrix(0,nrow=2*length(Mesh),ncol = 2*length(Mesh))
+  j=seq(4)
+  L<-Mesh[2]-Mesh[1]
+  for (i in seq(length(Mesh)-1)){
+    M[j,j]=M[j,j]+n@m/420*L*matrix(c(156,-22*L,54,13*L,-22*L,4*L^2,-13*L,-3*L^2,54,-13*L,156,22*L,13*L,-3*L^2,22*L,4*L^2),ncol=4,nrow=4)
+    #M[j,j]=M[j,j]+n@m*L/2*matrix(c(1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0),nrow = 4, ncol = 4)
+    j<-j+2
+  }
+  return(M)
+}
+
+phi_NL<-function(n,S){
+  ttt<-100
+  Mesh<-seq(0,n@L,by=n@dx/ttt)
+  indx<-c(seq(2,2*length(Mesh)-2),2*length(Mesh))
+  M<-Mcalc(n,Mesh)
+
+  P<-rep(NA,length(n@Mesh)*ttt-ttt+1)
+  P[seq(1,length(Mesh),by=ttt)]<-pnorm(0,mean=S@r_M@disp,sd=S@r_f@disp)
+  P<-linterp(P,max_allow = NULL)
+
+  K<-Kcalc(n,P,Mesh)
+
+  y<-rep(0,2*length(Mesh))
+  delta<-1
+
+  while(delta>1/mean(K)){
+    K_in<-K
+    A<-solve(K[indx,indx],tol=0)%*%M[indx,indx]
+
+    phi<-matrix(rep(1,2*length(Mesh)),ncol=1)
+    phi[c(1,2*length(Mesh))-1]<-0
+
+    delta2<-1
+
+    while (delta2>1e-12){
+      phi_in<-phi
+      y[indx]<-(A%*%phi[indx])
+
+      phi<-y/y[which.max(abs(y))]
+
+      lambda<-y[indx[length(indx)]]
+      Mt<-sum(phi[seq(1,length(phi),by=2)]*phi[seq(1,length(phi),by=2)]*n@dx/ttt)
+      phi=phi/sqrt(Mt)*sqrt(n@L)
+
+      #delta2<-abs(lambda-lambda_in)
+      delta2<-t(phi-phi_in)%*%(phi-phi_in)
+      #plot(n@Mesh,phi[seq(1,length(phi),by=2)],type='l')
+    }
+    Mt<-sum(phi*phi*n@dx/100)
+    phi=phi/sqrt(Mt)*sqrt(n@L)
+    plot(Mesh,phi[seq(1,length(phi),by=2)],type='l')
+    y[indx]<-A%*%phi[indx]
+
+    print(y[length(y)])
+    w<-sqrt(abs(1/y[length(y)]))
+
+    print(w)
+    K<-Kcalc(n,phi,R,Mesh)
+    delta<-mean(sqrt((K-K_in)%*%t(K-K_in)))
+    print(delta)
+
+    a<-eigen(A)
+
+  }
+
+
+  return(a)
+}
+
+
+
+phi_NH<-function(S){
+  require('FluMoDL')
+  n<-S@n
+  ttt<-10
+  Mesh<-seq(0,n@L,by=n@dx/ttt)
+  indx<-c(seq(2,2*length(Mesh)-2),2*length(Mesh))
+  M<-Mcalc(n,Mesh)
+
+  P<-rep(NA,length(n@Mesh)*ttt-ttt+1)
+  P[seq(1,length(Mesh),by=ttt)]<-pnorm(0,mean=S@r_M@disp,sd=S@r_f@disp)
+  P<-linterp(P,max_allow = NULL)
+
+  K<-Kcalc(n,P,Mesh)
+
+  y<-rep(0,2*length(Mesh))
+  delta<-1
+
+  A<-solve(K[indx,indx],tol=0)%*%M[indx,indx]
+  a<-eigen(A)
+
+  phi<-matrix(rep(0,length(n@Mesh) * length(n@mode_shape@w_n)),nrow = length(n@Mesh))
+  D2phi<-t(phi)
+  D3phi<-t(phi)
+
+
+  w_n<-sqrt(1/a$values[seq(length(n@mode_shape@w_n))])
+
+
+  phi[seq(2,length(n@Mesh)-1),]<-(a$vectors[seq(2*ttt,sqrt(length(a$vectors)-1),by=ttt*2),seq(length(n@mode_shape@w_n))])
+  d2a<-diff(a$vectors[seq(2,sqrt(length(a$vectors)-1),by=2),seq(length(n@mode_shape@w_n))],differences = 2)
+  d3a<-diff(a$vectors[seq(2,sqrt(length(a$vectors)-1),by=2),seq(length(n@mode_shape@w_n))],differences = 3)
+
+
+
+  phi<-t(matrix(phi,ncol=length(n@mode_shape@w_n)))
+  D2phi[,seq(length(n@Mesh)-1)]<-t(matrix(d2a[seq(1,dim(d2a)[1],by=ttt),],ncol=length(n@mode_shape@w_n)))
+  D3phi[,seq(length(n@Mesh)-1)]<-t(matrix(d3a[seq(1,dim(d3a)[1],by=ttt),],ncol=length(n@mode_shape@w_n)))
+  w_n<-matrix(w_n,ncol=1)
+
+  H_i<-which(n@Mesh %% n@L_slab < (n@Mesh[2]-n@Mesh[1])/2)
+  D2phi[,H_i]<-0
+
+  for (i in seq(length(phi[,1]))){
+    Mt<-sum(phi[i,]*phi[i,]*n@dx)
+    phi[i,]=  phi[i,]/sqrt(Mt)*sqrt(n@L)
+    D2phi[i,]=D2phi[i,]/sqrt(Mt)*sqrt(n@L)
+    D3phi[i,]=D3phi[i,]/sqrt(Mt)*sqrt(n@L)
+  }
+
+  S@n@mode_shape<-new("mode_shape",
+                      phi=phi,
+                      D2phi=D2phi,
+                      D3phi=D3phi,
+                      w_n=w_n)
+
+  return(S)
+
+}
+
+
+
+
+
+Pcalc<-function(Cr,n){
+  G<-Gcalc(n)
+  GM<-GMcalc(n)
+  GS<-GScalc(n)
+  CpM<-CpMcalc(Cr,n)
+  print('calculating the Means')
+  mean_responses <- Meancalc (n,CpM)
+  Spp <- Spcalc(n)
+  print('calculating the propagation pressures')
+  Sff <- Sffcalc(Cr,n,Spp)
+  Cpf <- Varcalc(Sff,n@w_range,n@Mesh)
+  print('calculating the fluctuations')
+  Spectral_response <-fluccalc (Sff,n,G,GM,GS)
+  disp_f    = Varcalc(Spectral_response@disp,n@w_range,n@Mesh)
+  moment_f  = Varcalc(Spectral_response@Moment,n@w_range,n@Mesh)
+  Shear_f   = Varcalc(Spectral_response@Shear,n@w_range,n@Mesh)
+  fluc_responses<-new('response',
+                      disp=matrix(disp_f,nrow=1),
+                      Moment=matrix(moment_f,ncol=1),
+                      Shear=matrix(Shear_f,ncol=1)
+  )
+  new_solution<-new('solution',
+                    CpM=CpM,
+                    Cpf=Cpf,
+                    Sff=Sff,
+                    s_r=Spectral_response,
+                    r_M=mean_responses,
+                    r_f=fluc_responses,
+                    n=n)
+
+  return(new_solution)
+}
+
+PLcalc<-function(S){
+  G<-Gcalc(S@n)
+  GM<-GMcalc(S@n)
+  GS<-GScalc(S@n)
+  CpM<-S@CpM
+  mean_responses <- S@r_M
+  Sff <- S@Sff
+  Cpf <- S@Cpf
+  print('calculating the fluctuations')
+  Spectral_response <-fluccalc (Sff,n,G,GM,GS)
+  disp_f    = Varcalc(Spectral_response@disp,n@w_range,n@Mesh)
+  moment_f  = Varcalc(Spectral_response@Moment,n@w_range,n@Mesh)
+  Shear_f   = Varcalc(Spectral_response@Shear,n@w_range,n@Mesh)
+  fluc_responses<-new('response',
+                      disp=matrix(disp_f,nrow=1),
+                      Moment=matrix(moment_f,ncol=1),
+                      Shear=matrix(Shear_f,ncol=1)
+  )
+  new_solution<-new('solution',
+                    CpM=CpM,
+                    Cpf=Cpf,
+                    Sff=Sff,
+                    s_r=Spectral_response,
+                    r_M=mean_responses,
+                    r_f=fluc_responses,
+                    n=n)
+
+  return(new_solution)
+}
+
+
+
+tmpcalc<-function(n){
+  G<-Gcalc(n)
+  GM<-GMcalc(n)
+  GS<-GScalc(n)
+  Sff<-Spcalc(n)
+  Cpf<-n@Cpf_up
+  Spectral_response <-fluccalc (Sff,n,G,GM,GS)
+  disp_f    = Varcalc(Spectral_response@disp,n@w_range,n@Mesh)
+  moment_f  = Varcalc(Spectral_response@Moment,n@w_range,n@Mesh)
+  Shear_f   = Varcalc(Spectral_response@Shear,n@w_range,n@Mesh)
+  fluc_responses<-new('response',
+                      disp=matrix(disp_f,nrow=1),
+                      Moment=matrix(moment_f,ncol=1),
+                      Shear=matrix(Shear_f,ncol=1)
+  )
+  new_solution<-new('solution',
+                    Cpf=Cpf,
+                    Sff=Sff,
+                    s_r=Spectral_response,
+                    r_f=fluc_responses,
+                    n=n)
+  return(new_solution)
+}
+
+
+MeanGcalc<-function(Cr,n,tmp){
+  CpM<-CpMcalc(Cr,n)
+  print('calculating the Means')
+  mean_responses <- Meancalc (n,CpM)
+  new_solution<-new('solution',
+                    CpM=CpM,
+                    Cpf=tmp@Cpf,
+                    Sff=tmp@Sff,
+                    s_r=tmp@s_r,
+                    r_M=mean_responses,
+                    r_f=tmp@r_f,
+                    n=n)
+
+  return(new_solution)
+}
+
+
+Loadcalc<-function(Cr,n,tmp){
+  print('calculating the loads')
+  CpM<-CpMcalc(Cr,n)
+  Spp <- Spcalc(n)
+  print('calculating the propagation pressures')
+  Sff <- Sffcalc(Cr,n,Spp)
+  Cpf <- Varcalc(Sff,n@w_range,n@Mesh)
+  new_solution<-new('solution',
+                    CpM=CpM,
+                    Cpf=Cpf,
+                    Sff=Sff,
+                    s_r=tmp@s_r,
+                    r_M=tmp@r_M,
+                    r_f=tmp@r_f,
+                    n=n)
+
+  return(new_solution)
+}
+
+
+
+flucGcalc<-function(Cr,S){
+  G<-Gcalc(S@n)
+  GM<-GMcalc(S@n)
+  GS<-GScalc(S@n)
+  Spp <- Spcalc(S@n)
+  print('calculating the propagation pressures')
+  Sff <- Sffcalc(Cr,S@n,Spp)
+  Cpf <- Varcalc(Sff,n@w_range,n@Mesh)
+  print('calculating the fluctuations')
+  Spectral_response <-fluccalc (Sff,n,G,GM,GS)
+  disp_f    = Varcalc(Spectral_response@disp,n@w_range,n@Mesh)
+  moment_f  = Varcalc(Spectral_response@Moment,n@w_range,n@Mesh)
+  Shear_f   = Varcalc(Spectral_response@Shear,n@w_range,n@Mesh)
+  fluc_responses<-new('response',
+                      disp=matrix(disp_f,nrow=1),
+                      Moment=matrix(moment_f,ncol=1),
+                      Shear=matrix(Shear_f,ncol=1)
+  )
+  new_solution<-new('solution',
+                    CpM=S@CpM,
+                    Cpf=Cpf,
+                    Sff=Sff,
+                    s_r=Spectral_response,
+                    r_M=S@r_M,
+                    r_f=fluc_responses,
+                    n=n)
+  return(new_solution)
+}
+
+
+
+
+response_calc<-function(Cr,S){
+
+  S<-flucGcalc(Cr,S)
+  delta<-1
+  while (delta>0.99){
+    disp_in<-S@r_M@disp+2.56*S@r_f@disp
+    print('working on mode shapes')
+    S<-phi_NH(S)
+    S<-Pcalc(Cr,S@n)
+    disp_out<-S@r_M@disp+2.56*S@r_f@disp
+    D<-abs((disp_out[which(abs(disp_out)>0.000001)]-disp_in[which(abs(disp_out)>0.000001)])/(disp_out[which(abs(disp_out)>0.000001)]))
+    if (length(disp_out)!=0){
+      delta<-sqrt(t(D)%*%(D))/length(disp_out)
+    }else{
+      delta<-1
+    }
+
+    print(paste('RMSE=',delta))
+  }
+  #ggplot(mapping=aes(x=S@n@Mesh, y=S@r_M@disp)) + geom_line()+
+  #  geom_ribbon(aes(ymin =S@r_M@disp-2.56*10*S@r_f@disp, ymax = S@r_M@disp+2.56*10*S@r_f@disp), alpha = 0.2)
+  return(S)
+}
+
+
+response_Gcalc<-function(Cr,S){
+
+  S<-flucGcalc(Cr,S)
+  delta<-1
+  while (delta>0.99){
+    disp_in<-S@r_M@disp+2.56*S@r_f@disp
+    print('working on mode shapes')
+    S<-phi_NH(S)
+    S<-Pcalc(Cr,S@n)
+    disp_out<-S@r_M@disp+2.56*S@r_f@disp
+    D<-abs((disp_out[which(abs(disp_out)>0.0001)]-disp_in[which(abs(disp_out)>0.0001)])/(disp_out[which(abs(disp_out)>0.0001)]))
+    if (length(disp_out)!=0){
+      delta<-sqrt(t(D)%*%(D))/length(disp_out)
+    }else{
+      delta<-1
+    }
+
+    print(paste('RMSE=',delta))
+  }
+  #ggplot(mapping=aes(x=S@n@Mesh, y=S@r_M@disp)) + geom_line()+
+  #  geom_ribbon(aes(ymin =S@r_M@disp-2.56*10*S@r_f@disp, ymax = S@r_M@disp+2.56*10*S@r_f@disp), alpha = 0.2)
+  return(S)
+}
+
+
+
+binary <- function(x,n) {
+  i <- 0
+  string <- numeric(32)
+  while(x > 0) {
+    string[32 - i] <- x %% 2
+    x <- x %/% 2
+    i <- i + 1
+  }
+  first <- match(1, string)
+  return(string[32:(32-n+1)])
+}
+
+S_prob<-function(S1,S,pd,P_sum){
+  S1@CpM       <-(S1@CpM       *(P_sum-pd)+ S@CpM       *pd)/P_sum
+  S1@Cpf       <-(S1@Cpf       *(P_sum-pd)+ S@Cpf       *pd)/P_sum
+  S1@Sff       <-(S1@Sff       *(P_sum-pd)+ S@Sff       *pd)/P_sum
+
+  S1@s_r@disp  <-(S1@s_r@disp  *(P_sum-pd)+ S@s_r@disp  *pd)/P_sum
+  S1@s_r@Moment<-(S1@s_r@Moment*(P_sum-pd)+ S@s_r@Moment*pd)/P_sum
+  S1@s_r@Shear <-(S1@s_r@Shear *(P_sum-pd)+ S@s_r@Shear *pd)/P_sum
+
+  S1@r_M@disp  <-(S1@r_M@disp  *(P_sum-pd)+ S@r_M@disp  *pd)/P_sum
+  S1@r_M@Moment<-(S1@r_M@Moment*(P_sum-pd)+ S@r_M@Moment*pd)/P_sum
+  S1@r_M@Shear <-(S1@r_M@Shear *(P_sum-pd)+ S@r_M@Shear *pd)/P_sum
+
+  S1@r_f@disp  <-(S1@r_f@disp  *(P_sum-pd)+ S@r_f@disp  *pd)/P_sum
+  S1@r_f@Moment<-(S1@r_f@Moment*(P_sum-pd)+ S@r_f@Moment*pd)/P_sum
+  S1@r_f@Shear <-(S1@r_f@Shear *(P_sum-pd)+ S@r_f@Shear *pd)/P_sum
+  return(S1)
+}
+
+
+result_calc<-function(n){
+  require('ggplot2')
+  Cr<-c()
+  Mesh_p<-n@Mesh[(n@CpM_up+2.56*n@Cpf_up)/98150/n@H>0.05]
+  for (i in seq(1:(n@N-1))){
+    Cr<-c(Cr,n@Mesh[abs(i*n@L_slab-n@Mesh)<n@dx/2])
+  }
+
+
+  Pd=rep(0,2^length(Cr))
+  for (i in seq(0,2^length(Cr)-1)){
+    P<-binary(i,length(Cr))
+    Crt<-c(Cr[which(P==1)],n@hole)
+    Crt_i<-which(is.element(n@Mesh,Crt))
+    Crt_n<-which(!is.element(n@Mesh,Crt))
+    Crt_n<-Crt_n[c(-1,-length(Crt_n))]
+    Pd[i+1]<-prod(n@pt[Crt_i])*prod(1-n@pt[Crt_n])
+  }
+
+  tmp<-sort(Pd,decreasing = TRUE,index.return=TRUE)
+
+  P<-binary(tmp$ix[1]-1,length(Cr))
+
+  Crt<-c(Cr[which(P==1)],n@hole)
+
+  S<-response_calc(Crt,n)
+  P_sum<-Pd[tmp$ix[1]]
+  S_t<-S_prob(S,S,1-Pd[tmp$ix[1]],P_sum)
+
+  print(
+    ggplot(mapping=aes(x=S_t@n@Mesh, y=S_t@r_M@disp))+
+      geom_line()+
+      geom_ribbon(aes(ymin =S_t@r_M@disp-2.56*S_t@r_f@disp, ymax = S_t@r_M@disp+2.56*S_t@r_f@disp), alpha = 0.2)+
+      geom_hline(yintercept=0, linetype="dashed", color = "red")+
+      geom_point(mapping=aes(x=Crt, y=rep(0,length(Crt),shape=4,col='red')))+
+      xlim(n@Mesh[1],
+           n@Mesh[length(n@Mesh)])+
+      ylim(min(S_t@r_M@disp-2.56*S_t@r_f@disp),
+           max(S_t@r_M@disp+2.56*S_t@r_f@disp))
+  )
+
+
+
+  for (i in tmp$ix[c(-1)]){
+    clc()
+    print(paste('main loop loading',round(P_sum*100),'%'))
+    if (P_sum>0.95){
+      break
+    }
+    P<-binary(i-1,length(Cr))
+    Crt<-c(Cr[which(P==1)],n@hole)
+    Crt<-sort(unique(Crt))
+    S<-response_calc(Crt,n)
+
+    P_sum<-P_sum+Pd[i]
+    S_t<-S_prob(S_t,S,Pd[i],P_sum)
+
+    print(
+      ggplot(mapping=aes(x=S_t@n@Mesh, y=S_t@r_M@disp))+
+        geom_line()+
+        geom_ribbon(aes(ymin =S_t@r_M@disp-2.56*S_t@r_f@disp, ymax = S_t@r_M@disp+2.56*S_t@r_f@disp), alpha = 0.2)+
+        geom_hline(yintercept=0, linetype="dashed", color = "red")+
+        geom_point(mapping=aes(x=Crt, y=rep(0,length(Crt),shape=4,col='red')))
+      #xlim(n@Mesh[1],
+      #     n@Mesh[length(n@Mesh)])+
+      #ylim(min(S_t@r_M@disp-2.56*S_t@r_f@disp),
+      #     max(S_t@r_M@disp+2.56*S_t@r_f@disp))
+    )
+
+  }
+
+  return(S_t)
+
+}
+
+
+result_calc_G<-function(n){
+  tmpo<-tmpcalc(n)
+  require('ggplot2')
+  Cr<-c()
+  Mesh_p<-n@Mesh[(n@CpM_up+2.56*n@Cpf_up)/98150/n@H>0.05]
+
+  for (i in seq(1:(n@N-1))){
+    Cr<-c(Cr,Mesh_p[abs(i*n@L_slab-Mesh_p)<n@dx/2])
+  }
+  P_fail<-n@pt[1]
+  n@pt<-rep(0,length(n@Mesh))
+  Cr_i<-which(is.element(n@Mesh,Cr))
+  n@pt[Cr_i]<-P_fail
+
+  Pd=rep(0,2^length(Cr))
+  for (i in seq(0,2^length(Cr)-1)){
+    P<-binary(i,length(Cr))
+    Crt<-c(Cr[which(P==1)],n@hole)
+    Crt_i<-which(is.element(n@Mesh,Crt))
+    Crt_n<-which(!is.element(n@Mesh,Crt))
+    Crt_n<-Crt_n[c(-1,-length(Crt_n))]
+    Pd[i+1]<-prod(n@pt[Crt_i])*prod(1-n@pt[Crt_n])
+  }
+
+  tmp<-sort(Pd,decreasing = TRUE,index.return=TRUE)
+
+  P<-binary(tmp$ix[1]-1,length(Cr))
+
+  Crt<-c(Cr[which(P==1)],n@hole)
+
+  S<-MeanGcalc(Crt,n,tmpo)
+  P_sum<-Pd[tmp$ix[1]]
+  S_t<-S_prob(S,S,1-Pd[tmp$ix[1]],P_sum)
+
+  print(
+    ggplot(mapping=aes(x=S_t@n@Mesh, y=S_t@r_M@disp))+
+      geom_line()+
+      #geom_ribbon(aes(ymin =S_t@r_M@disp-2.56*S_t@r_f@disp, ymax = S_t@r_M@disp+2.56*S_t@r_f@disp), alpha = 0.2)+
+      geom_hline(yintercept=0, linetype="dashed", color = "red")+
+      geom_point(mapping=aes(x=Crt, y=rep(0,length(Crt)),shape=4,col='red'))+
+      xlim(n@Mesh[1],
+           n@Mesh[length(n@Mesh)])+
+      ylim(min(S_t@r_M@disp-2.56*S_t@r_f@disp),
+           max(S_t@r_M@disp+2.56*S_t@r_f@disp))
+  )
+
+
+
+  for (i in tmp$ix[c(-1)]){
+
+    print(paste('main loop loading',round(P_sum*100),'%'))
+    if (P_sum>0.95){
+      break
+    }
+    P<-binary(i-1,length(Cr))
+    Crt<-c(Cr[which(P==1)],n@hole)
+    Crt<-sort(unique(Crt))
+    S<-MeanGcalc(Crt,n,S_t)
+
+    P_sum<-P_sum+Pd[i]
+    S_t<-S_prob(S_t,S,Pd[i],P_sum)
+    clc()
+    print(
+      ggplot(mapping=aes(x=S_t@n@Mesh, y=S_t@r_M@disp))+
+        geom_line()+
+        #geom_ribbon(aes(ymin =S_t@r_M@disp-2.56*S_t@r_f@disp, ymax = S_t@r_M@disp+2.56*S_t@r_f@disp), alpha = 0.2)+
+        geom_hline(yintercept=0, linetype="dashed", color = "red")+
+        geom_point(mapping=aes(x=Crt, y=rep(0,length(Crt)),shape=4,col='red'))
+      #xlim(n@Mesh[1],
+      #     n@Mesh[length(n@Mesh)])+
+      #ylim(min(S_t@r_M@disp-2.56*S_t@r_f@disp),
+      #     max(S_t@r_M@disp+2.56*S_t@r_f@disp))
+    )
+
+  }
+
+  P_sum<-0
+  for (i in tmp$ix){
+
+    print(paste('main loop loading',round(P_sum*100),'%'))
+    if (P_sum>0.95){
+      break
+    }
+    P<-binary(i-1,length(Cr))
+    Crt<-c(Cr[which(P==1)],n@hole)
+    Crt<-sort(unique(Crt))
+    S<-flucGcalc(Crt,S_t)
+
+    P_sum<-P_sum+Pd[i]
+    S_t<-S_prob(S_t,S,Pd[i],P_sum)
+    save(n,Cr,S_t,tmp,file='S.Rdata')
+    clc()
+    print(
+      ggplot(mapping=aes(x=S_t@n@Mesh, y=S_t@r_M@disp))+
+        geom_line()+
+        geom_ribbon(aes(ymin =S_t@r_M@disp-2.56*S_t@r_f@disp, ymax = S_t@r_M@disp+2.56*S_t@r_f@disp), alpha = 0.2)+
+        geom_hline(yintercept=0, linetype="dashed", color = "red")+
+        geom_point(mapping=aes(x=Crt, y=rep(0,length(Crt)),col='blue'))+
+        geom_point(mapping=aes(x=c(Cr[which(P==0)],S_t@n@Mesh[c(1,length(S_t@n@Mesh))]), y=rep(0,length(Cr[which(P==0)])+2),col='red'))+
+        xlim(0,S_t@n@L)+
+        theme_minimal()
+      #ylim(min(S_t@r_M@disp-2.56*S_t@r_f@disp),
+      #     max(S_t@r_M@disp+2.56*S_t@r_f@disp))
+    )
+
+  }
+
+  return(S_t)
+
+}
+
+
+result_loading_G<-function(n,show_plot=T,send_on_telegram=F,history=F){
+
+  if (send_on_telegram){
+
+    require(telegram.bot)
+    print('initialize ...')
+    # Initialize bot
+    bot <- Bot(token = "5423156803:AAG0xoiTbeLpLgwTSnRLyIiIs4okIIMaVew")
+
+    # Get updates
+    updates <- bot$getUpdates()
+
+    # Retrieve your chat id
+    # Note: you should text the bot before calling `getUpdates`
+    chat_id <- -1001754183369
+    bot$sendMessage(chat_id,
+                    text = 'history',
+                    parse_mode = "Markdown")
+
+    C1<-max(n@CpM_up/98150/(n@H-n@Y))
+    C2<-max(n@Cpf_up/98150/(n@H-n@Y))
+    text1=paste('#History \n *Loading:* \n CPM=',round(C1,2),'\n CPF=',round(C2,2),'\n H=',round(n@H),'\n P=',round(n@P_fail,2),'\n a=',round(n@a),'\n R=',round(n@R),'\n L=',round(n@L,1),'\n N=',n@N,'\n tw=',round(n@tw,1),'\n Y=',round(n@Y,1),sep = "")
+    # Send message
+    bot$sendMessage(chat_id,
+                    text = text1,
+                    parse_mode = "Markdown"
+    )
+  }
+
+  tmpo<-tmpcalc(n)
+  require('ggplot2')
+  Cr<-c()
+  Mesh_p<-n@Mesh[abs(n@CpM_up+2.56*n@Cpf_up-n@Y*98150)/98150/n@H>0.05]
+
+  for (i in seq(1:(n@N-1))){
+    Cr<-c(Cr,Mesh_p[abs(i*n@L_slab-Mesh_p)<n@dx/2])
+  }
+  n@pt<-rep(0,length(n@Mesh))
+  Cr_i<-which(is.element(n@Mesh,Cr))
+  n@pt[Cr_i]<-n@P_fail
+
+
+  Pd=rep(0,2^length(Cr))
+  for (i in seq(0,2^length(Cr)-1)){
+    P<-binary(i,length(Cr))
+    Crt<-c(Cr[which(P==1)],n@hole)
+    Crt_i<-which(is.element(n@Mesh,Crt))
+    Crt_n<-which(!is.element(n@Mesh,Crt))
+    Crt_n<-Crt_n[c(-1,-length(Crt_n))]
+    Pd[i+1]<-prod(n@pt[Crt_i])*prod(1-n@pt[Crt_n])
+  }
+
+  tmp<-sort(Pd,decreasing = TRUE,index.return=TRUE)
+
+  P<-binary(tmp$ix[1]-1,length(Cr))
+
+  Crt<-c(Cr[which(P==1)],n@hole)
+
+  S<-Loadcalc(Crt,n,tmpo)
+  P_sum<-Pd[tmp$ix[1]]
+  S_t<-S_prob(S,S,1-Pd[tmp$ix[1]],P_sum)
+
+  if (show_plot){
+    p1<-draw_geo(n)+
+      geom_line(aes(x=S_t@n@Mesh/S_t@n@H, y=-(S_t@CpM)/98150/S_t@n@H))+
+      geom_ribbon(aes(x=S_t@n@Mesh/S_t@n@H, y=-(S_t@CpM)/98150/S_t@n@H,ymin =-(S_t@CpM-2.56*S_t@Cpf)/98150/S_t@n@H, ymax = -(S_t@CpM+2.56*S_t@Cpf)/98150/S_t@n@H), alpha = 0.2)+
+      geom_hline(yintercept=0, linetype="dashed", color = "red")+
+      geom_point(mapping=aes(x=Crt/S_t@n@H, y=rep(0,length(Crt))),shape=4,col='red',size=4)+
+      theme_minimal()+
+      xlab((paste('P_{sum}=',round(P_sum,3),',P=',round(P_sum,3))))+
+      ylab('')+
+      ylim(-1,1.1)+
+      theme(legend.position="none")
+    print(p1)
+
+    if (send_on_telegram){
+      ggsave('D:/new_file/random_loading/last pic/pic.png',plot=p1,device = 'png',width = 9.6, height = 5.6, units = "in")
+      ggsave('D:/new_file/random_loading/last pic/pic.svg',plot=p1,device = 'svg',width = 9.6, height = 5.6, units = "in")
+      # Send photo
+      chat_id <- -1001754183369
+      bot$sendPhoto(chat_id,
+                    photo = "D:/new_file/random_loading/last pic/pic.png"
+      )
+      chat_id <- -1001754183369
+      bot$sendDocument(chat_id,
+                       document = "D:/new_file/random_loading/last pic/pic.svg"
+      )
+    }
+  }
+
+  histo_S<-c()
+  for (i in tmp$ix[c(-1)]){
+    print(paste('main loop loading',round(P_sum*100),'%'))
+    if (P_sum>0.95){
+      break
+    }
+    P<-binary(i-1,length(Cr))
+    Crt<-c(Cr[which(P==1)],n@hole)
+    Crt<-sort(unique(Crt))
+    S<-Loadcalc(Crt,n,S_t)
+
+    P_sum<-P_sum+Pd[i]
+    if (history){histo_S<-c(histo_S,S_t)}
+    S_t<-S_prob(S_t,S,Pd[i],P_sum)
+    clc()
+    if (show_plot){
+      p1<-draw_geo(n)+
+        geom_line(mapping=aes(x=S_t@n@Mesh/S_t@n@H, y=-(S_t@CpM)/98150/S_t@n@H))+
+        geom_line(mapping=aes(x=S@n@Mesh/S_t@n@H, y=-(S@CpM)/98150/S_t@n@H),linetype="dashed")+
+        geom_line(mapping=aes(x=S@n@Mesh/S_t@n@H, y=-(S@CpM-2.56*S@Cpf)/98150/S_t@n@H),linetype="dashed", col='red')+
+        geom_line(mapping=aes(x=S@n@Mesh/S_t@n@H, y=-(S@CpM+2.56*S@Cpf)/98150/S_t@n@H),linetype="dashed", col='red')+
+        geom_ribbon(aes(x=S_t@n@Mesh/S_t@n@H, y=-(S_t@CpM)/98150/S_t@n@H,ymin =-(S_t@CpM-2.56*S_t@Cpf)/98150/S_t@n@H, ymax = -(S_t@CpM+2.56*S_t@Cpf)/98150/S_t@n@H), alpha = 0.2)+
+        geom_line(mapping=aes(x=c(0,n@L)/S_t@n@H, y=c(0,0)), linetype="dashed", color = "blue")+
+        geom_point(mapping=aes(x=Crt/S_t@n@H, y=rep(0,length(Crt))),shape=4,col='red',size=4)+
+        theme_minimal()+
+        xlab((paste('P_{sum}=',round(P_sum,3),',P=',round(Pd[i],3))))+
+        ylab('')+
+        ylim(-1,1.1)+
+        theme(legend.position="none")
+      print(p1)
+      if (send_on_telegram){
+        ggsave('D:/new_file/random_loading/last pic/pic.png',plot=p1,device = 'png',width = 9.6, height = 5.6, units = "in")
+        ggsave('D:/new_file/random_loading/last pic/pic.svg',plot=p1,device = 'svg',width = 9.6, height = 5.6, units = "in")
+        # Send photo
+        chat_id <- -1001754183369
+        bot$sendPhoto(chat_id,
+                      photo = "D:/new_file/random_loading/last pic/pic.png"
+        )
+        chat_id <- -1001754183369
+        bot$sendDocument(chat_id,
+                         document = "D:/new_file/random_loading/last pic/pic.svg"
+        )
+      }
+    }
+  }
+  if (send_on_telegram){
+    chat_id <- -1001754183369
+    bot$sendMessage(chat_id,
+                    text = 'end_of_history',
+                    parse_mode = "Markdown"
+    )
+  }
+
+
+
+  C1<-max(n@CpM_up/98150/(n@H-n@Y))
+  C2<-max(n@Cpf_up/98150/(n@H-n@Y))
+  filename=paste('D:/new_file/random_loading/loading_CPM=',round(C1,2),'_CPF=',round(C2,2),'_H=',round(n@H),'_P=',round(n@P_fail,2),'_a=',round(n@a),'_R=',round(n@R),'_L=',round(n@L,1),'_N=',n@N,'_tw=',round(n@tw,1),'_Y=',round(n@Y,1),'_sealed.Rdata',sep = "")
+  save(S_t,histo_S,file=filename)
+  require(telegram.bot)
+  print('initialize ...')
+  # Initialize bot
+  bot <- Bot(token = "5423156803:AAG0xoiTbeLpLgwTSnRLyIiIs4okIIMaVew")
+
+  # Get updates
+  updates <- bot$getUpdates()
+
+  # Retrieve your chat id
+  chat_id <- 108483194
+  print('sending file to telegram bot')
+  text1=paste('#Loadingfiles \n *Loading:* \n CPM=',round(C1,2),'\n CPF=',round(C2,2),'\n H=',round(n@H),'\n P=',round(n@P_fail,2),'\n a=',round(n@a),'\n R=',round(n@R),'\n L=',round(n@L,1),'\n N=',n@N,'\n tw=',round(n@tw,1),'\n Y=',round(n@Y,1),sep = "")
+  # Send message
+  bot$sendMessage(chat_id,
+                  text = text1,
+                  parse_mode = "Markdown"
+  )
+  bot$sendDocument(chat_id,
+                   document = filename
+  )
+  chat_id <- -1001754183369
+  print('sending file to telegram bot')
+  text1=paste('#Loadingfiles \n *Loading:* \n CPM=',round(C1,2),'\n CPF=',round(C2,2),'\n H=',round(n@H),'\n P=',round(n@P_fail,2),'\n a=',round(n@a),'\n R=',round(n@R),'\n L=',round(n@L,1),'\n N=',n@N,'\n tw=',round(n@tw,1),'\n Y=',round(n@Y,1),sep = "")
+  # Send message
+  bot$sendMessage(chat_id,
+                  text = text1,
+                  parse_mode = "Markdown"
+  )
+  bot$sendDocument(chat_id,
+                   document = filename
+  )
+  p1<-draw_geo(n)+
+    geom_line(mapping=aes(x=S_t@n@Mesh/S_t@n@H, y=-(S_t@CpM)/98150/S_t@n@H))+
+    geom_ribbon(aes(x=S_t@n@Mesh/S_t@n@H, y=-(S_t@CpM)/98150/S_t@n@H,ymin =-(S_t@CpM-2.56*S_t@Cpf)/98150/S_t@n@H, ymax = -(S_t@CpM+2.56*S_t@Cpf)/98150/S_t@n@H, alpha = 0.2))+
+    geom_line(mapping=aes(x=c(0,n@L/S_t@n@H), y=c(0,0)), linetype="dashed", color = "blue")+
+    geom_point(mapping=aes(x=Cr/S_t@n@H, y=rep(0,length(Cr))),shape=4,col='red',size=4)+
+    theme_minimal()+
+    xlab('')+
+    ylab('')+
+    ylim(-1,1.1)+
+    theme(legend.position="none")
+  ggsave('D:/new_file/random_loading/last pic/pic.png',plot=p1,device = 'png',width = 9.6, height = 5.6, units = "in")
+  ggsave('D:/new_file/random_loading/last pic/pic.svg',plot=p1,device = 'svg',width = 9.6, height = 5.6, units = "in")
+  # Send photo
+  chat_id <- 108483194
+  bot$sendPhoto(chat_id,
+                photo = "D:/new_file/random_loading/last pic/pic.png"
+  )
+  chat_id <- -1001754183369
+  bot$sendPhoto(chat_id,
+                photo = "D:/new_file/random_loading/last pic/pic.png"
+  )
+  chat_id <- 108483194
+  bot$sendDocument(chat_id,
+                   document = "D:/new_file/random_loading/last pic/pic.svg"
+  )
+  chat_id <- -1001754183369
+  bot$sendDocument(chat_id,
+                   document = "D:/new_file/random_loading/last pic/pic.svg"
+  )
+}
+
+
+
+response_G<-function(S_t,n){
+  S_t@r_M<-Meancalc(n,S_t@CpM)
+  delta<-1
+  S_t<-phi_NH(S_t)
+  S<-PLcalc(S_t)
+  S_t<-S
+  print('working on mode shapes')
+  while (delta>0.01){
+    #disp_in<-S_t@r_M@disp+2.56*S_t@r_f@disp
+    S<-S_prob(S,S_t,0.8,1)
+    S_t<-phi_NH(S)
+    S_t<-PLcalc(S_t)
+    #disp_out<-S_t@r_M@disp+2.56*S_t@r_f@disp
+    #D<-abs((disp_out-disp_in)/max(abs(disp_out-disp_in)))
+    #if (length(disp_out)!=0){
+    #  delta<-sqrt((D)%*%t(D))/length(disp_out)
+    #}else{
+    delta<-1
+    #}
+    D<-abs((S_t@r_f@disp-S@r_f@disp)/max(abs(S_t@r_f@disp-S@r_f@disp)))
+    delta<-sqrt((D)%*%t(D))/length(S_t@r_f@disp)
+    print(paste('RMSE=',delta))
+    print(
+      ggplot()+
+        geom_line(mapping=aes(x=S_t@n@Mesh, y=(S_t@r_M@disp)))+
+        geom_line(mapping=aes(x=S@n@Mesh, y=(S@r_M@disp),linetype="dashed"))+
+        geom_line(mapping=aes(x=S@n@Mesh, y=(S@r_M@disp-2.56*S@r_f@disp)),linetype="dashed", col='red')+
+        geom_line(mapping=aes(x=S@n@Mesh, y=(S@r_M@disp+2.56*S@r_f@disp)),linetype="dashed", col='red')+
+        geom_ribbon(aes(x=S_t@n@Mesh,ymin =(S_t@r_M@disp-2.56*S_t@r_f@disp), ymax = (S_t@r_M@disp+2.56*S_t@r_f@disp), alpha = 0.2))+
+        geom_line(mapping=aes(x=c(0,n@L), y=c(0,0)), linetype="dashed", color = "blue")+
+        geom_point(mapping=aes(x=Cr, y=rep(0,length(Cr))))
+
+    )
+    save(S_t,S,file='SS.Rdata')
+  }
+
+
+
+  return(S_t)
+
+}
+
+
+setClass(Class="motion_matrices",
+         representation(
+           K="matrix",
+           M="matrix"
+         )
+)
+
+
+KMcalc_solid_SDOF<-function(n){
+  require('pracma')
+  K<-eye(n@N)*n@K_a*n@L_slab
+  M<-eye(n@N)*n@m*n@L_slab
+  new_motion_matrices<-new("motion_matrices",
+                           K=K,
+                           M=M
+  )
+  return(new_motion_matrices)
+}
+
+KMcalc_solid_2DOF<-function(n){
+  KL<-matrix(c(1/2, 0, 0,1/2),ncol=2)
+  ML<-matrix(c(1/2, 0, 0,1/2),ncol=2)
+  K<-matrix(rep(0,length(DOF)^2),ncol=length(DOF))
+  M<-matrix(rep(0,length(DOF)^2),ncol=length(DOF))
+  for (i in (seq(n@L_slab/n@dx+2,DOF[length(DOF)],by=n@L_slab/n@dx+1)-1)){
+    indx<-c(i,i+1)
+    K[indx,indx]<-n@K_a*n@L_slab*KL
+    M[indx,indx]<-n@m  *n@L_slab*ML
+  }
+  new_motion_matrices<-new("motion_matrices",
+                           K=K,
+                           M=M
+  )
+  return(new_motion_matrices)
+}
+
+
+calculating_modal_shaps<-function(KM,DOF,FDOF){
+  phi<-matrix(0,nrow = length(DOF),ncol = length(DOF))
+  D2phi<-matrix(0,nrow = length(DOF),ncol = length(DOF))
+  D3phi<-matrix(0,nrow = length(DOF),ncol = length(DOF))
+  w_n<-matrix(Inf,nrow= length(DOF))
+  A<-solve(KM@K[FDOF,FDOF],tol=0)%*%KM@M[FDOF,FDOF]
+  a<-eigen(A)
+  w_n[FDOF]<-sqrt(1/a$values)
+  phi[FDOF,FDOF]<-a$vectors
+  F2DOF<-c(1,FDOF,length(DOF))
+  for (i in seq(length(F2DOF)/2)){
+    phi[,F2DOF[2*i-1]:F2DOF[2*i]]<-phi[F2DOF[2*i],]%*%t(seq(0,1,length.out=n@L_slab/n@dx+1))+phi[F2DOF[2*i-1],]%*%t(seq(1,0,length.out=n@L_slab/n@dx+1))
+  }
+  phi<-phi[w_n!=Inf,]
+  w_n<-w_n[w_n!=Inf]
+  D2phi<-D2phi[w_n!=Inf,]
+  D3phi<-D3phi[w_n!=Inf,]
+  w_n<-matrix(w_n,ncol = 1)
+
+  new_mode_shape<-new("mode_shape",
+                      phi=phi,
+                      D2phi=D2phi,
+                      D3phi=D3phi,
+                      w_n=w_n)
+  return(new_mode_shape)
+}
+
+
+
+response_SDOF<-function(S){
+  #calling the inputs
+  CpM<-S@CpM
+  Cpf<-S@Cpf
+  Sff<-S@Sff
+  n<-S@n
+  Hing_i<-which(abs((n@Mesh+0.0001) %% n@L_slab) <= n@dx/2)
+  indx<-sort(c(seq(length(n@Mesh)),Hing_i[c(-1,-length(Hing_i))]))
+  n@Mesh<-n@Mesh[indx]
+  CpM<-CpM[indx]
+  Cpf<-Cpf[indx]
+  Sff<-Sff[indx,indx,]
+  Hing_i<-which(abs((n@Mesh+0.0001) %% n@L_slab) <= n@dx/2)
+
+
+  phi<-matrix(0,nrow=n@N-2,ncol = length(n@Mesh))
+  D2phi<-matrix(0,nrow=n@N-2,ncol = length(n@Mesh))
+  D3phi<-matrix(0,nrow=n@N-2,ncol = length(n@Mesh))
+  w_n<-matrix(0,nrow=n@N-2,ncol=1)
+
+  CpM[Hing_i[1]:Hing_i[2]]<-rep(mean(CpM[Hing_i[1]:Hing_i[2]]),Hing_i[2]-Hing_i[1]+1)
+  CpM[Hing_i[length(Hing_i)-1]:Hing_i[length(Hing_i)]]<-rep(mean(CpM[Hing_i[length(Hing_i)-1]:Hing_i[length(Hing_i)]]),Hing_i[length(Hing_i)]-Hing_i[length(Hing_i)-1]+1)
+  S@r_M@disp<-matrix(rep(0,length(n@Mesh))  ,ncol=1)
+  S@r_M@Moment<-matrix(rep(0,length(n@Mesh)),ncol=1)
+  S@r_M@Shear<-matrix(rep(0,length(n@Mesh)) ,ncol=1)
+
+  S@r_f@disp<-matrix(rep(0,length(n@Mesh))  ,ncol=1)
+  S@r_f@Moment<-matrix(rep(0,length(n@Mesh)),ncol=1)
+  S@r_f@Shear<-matrix(rep(0,length(n@Mesh)) ,ncol=1)
+  delta<-1
+  while (delta>0.01){
+    P<-matrix(pnorm(0,S@r_M@disp,S@r_f@disp),nrow = 1)
+    KL<-(P*n@K_f+(1-P)*n@K_a)
+    KL_in<-KL
+
+    for (i in seq(length(Hing_i)/2-2)){
+      S@r_M@disp[Hing_i[2*i+1]:Hing_i[2*i+2]]<-rep((sum(CpM[Hing_i[2*i+1]:Hing_i[2*i+2]])*n@dx-n@D*n@L_slab*1.5*98150)/(sum(KL[Hing_i[2*i+1]:Hing_i[2*i+2]])*n@dx),length(Hing_i[2*i+1]:Hing_i[2*i+2]))
+    }
+    S@r_M@disp<-matrix(S@r_M@disp,ncol=1)
+    S@r_M@Moment<-matrix(S@r_M@Moment,ncol=1)
+    S@r_M@Shear<-matrix(S@r_M@Shear,ncol=1)
+
+    for (i in seq(nrow(w_n))){
+      phi[i,Hing_i[2*i+1]:(Hing_i[2*i+2])]<-1
+      w_n[i]<-sqrt((sum(KL[Hing_i[2*i+1]:(Hing_i[2*i+2]-1)])*n@dx)/(n@D*n@L_slab*1.5*98150))
+    }
+
+
+
+    n@mode_shape@phi  <-  phi
+    n@mode_shape@D2phi<-D2phi
+    n@mode_shape@D3phi<-D3phi
+    n@mode_shape@w_n  <-  w_n
+
+    S@n<-n
+    S@CpM<-S@CpM
+    S@Cpf<-S@Cpf
+    S@Sff<-S@Sff
+
+    G <- Gcalc(n)
+    GM<-GMcalc(n)
+    GS<-GScalc(n)
+    Spectral_response <-fluccalc (Sff,n,G,GM,GS)
+    disp_f    = Varcalc(Spectral_response@disp,n@w_range,n@Mesh)
+    moment_f  = Varcalc(Spectral_response@Moment,n@w_range,n@Mesh)
+    Shear_f   = Varcalc(Spectral_response@Shear,n@w_range,n@Mesh)
+    fluc_responses<-new('response',
+                        disp=matrix(disp_f,ncol=1),
+                        Moment=matrix(moment_f,ncol=1),
+                        Shear=matrix(Shear_f,ncol=1)
+    )
+    S@s_r<-Spectral_response
+    S@r_f<-fluc_responses
+
+    P<-matrix(pnorm(0,S@r_M@disp,S@r_f@disp),nrow = 1)
+    KL<-(P*n@K_f+(1-P)*n@K_a)
+    DDD<-(KL-KL_in)/n@K_a
+    delta<-sqrt((DDD) %*% t(DDD)/length(DDD))
+    #print(delta)
+    clc()
+    print('finding response of SDOF')
+    pb <- txtProgressBar(min = 0,      # Minimum value of the progress bar
+                         max = 100,    # Maximum value of the progress bar
+                         style = 3,    # Progress bar style (also available style = 1 and style = 2)
+                         width = 50,   # Progress bar width. Defaults to getOption("width")
+                         char = "=",
+                         title = 'Nonlinearity solving...')   # Character used to create the bar
+    jjj<-100-round(100*(delta-0.05)/delta,2)
+    if (round(100*(delta-0.05)/delta,2)<=0){jjj<-100}
+    setTxtProgressBar(pb, jjj,title = "solving nonlinearity")
+    close(pb)
+
+    p1<-ggplot()
+    for(i in seq(0,n@N-1)){
+      p1<-p1+
+        geom_line(mapping=aes_string(x=S@n@Mesh[Hing_i[2*i+1]:Hing_i[2*i+2]], y=S@r_M@disp[Hing_i[2*i+1]:Hing_i[2*i+2]]))+
+        geom_ribbon(aes_string(x=S@n@Mesh[Hing_i[2*i+1]:Hing_i[2*i+2]],ymin =S@r_M@disp[Hing_i[2*i+1]:Hing_i[2*i+2]]-2.56*S@r_f@disp[Hing_i[2*i+1]:Hing_i[2*i+2]], ymax = S@r_M@disp[Hing_i[2*i+1]:Hing_i[2*i+2]]+2.56*S@r_f@disp[Hing_i[2*i+1]:Hing_i[2*i+2]]), alpha = 0.2)
+    }
+
+    print(
+      p1+
+        geom_line(mapping=aes(x=c(0,n@L), y=c(0,0)), linetype="dashed", color = "blue")+
+        theme_minimal()+
+        xlab('')+
+        ylab('displacements (m)')
+    )
+    max_F<-max(matrix(S@r_M@disp,nrow=1)+2.56*matrix(S@r_f@disp,nrow=1))
+
+    if (max_F>10){
+      print('slab failed')
+      break
+    }
+
+
+  }
+
+
+  return(S)
+
+
+}
+
+
+
+
+response_2DOF<-function(S){
+  #calling the inputs
+  CpM<-S@CpM
+  Cpf<-S@Cpf
+  Sff<-S@Sff
+  n<-S@n
+  Hing_i<-which(abs((n@Mesh+0.0001) %% n@L_slab) <= n@dx/2)
+  indx<-sort(c(seq(length(n@Mesh)),Hing_i[c(-1,-length(Hing_i))]))
+  n@Mesh<-n@Mesh[indx]
+  CpM<-CpM[indx]
+  Cpf<-Cpf[indx]
+  Sff<-Sff[indx,indx,]
+  Hing_i<-which(abs((n@Mesh+0.0001) %% n@L_slab) <= n@dx/2)
+  M=rep(0,n@N)
+
+  phi<-matrix(0,nrow=2*n@N-2,ncol = length(n@Mesh))
+  D2phi<-matrix(0,nrow=2*n@N-2,ncol = length(n@Mesh))
+  D3phi<-matrix(0,nrow=2*n@N-2,ncol = length(n@Mesh))
+  w_n<-matrix(0,nrow=2*n@N-2,ncol=1)
+
+  arm<-seq(-n@L_slab/2,n@L_slab/2,length.out=(n@L_slab/n@dx+1))
+  dxs<-c(n@dx/2,rep(n@dx,n@L_slab/n@dx-1),n@dx/2)
+
+  j<-1
+  for (i in seq(1,length(Hing_i),by=2)){
+    M  [j]<-sum(CpM[Hing_i[i]:(Hing_i[i+1])]*arm*dxs)
+    j<-j+1
+  }
+  M[1]<-sum(CpM[Hing_i[1]:(Hing_i[2])]*(arm+n@L_slab/2)*dxs)
+  M[n@N]<-sum(CpM[Hing_i[length(Hing_i)]:(Hing_i[length(Hing_i)-1])]*(arm-n@L_slab/2)*dxs)
+
+
+  S@r_M@disp<-matrix(rep(0,length(n@Mesh))  ,ncol=1)
+  S@r_M@Moment<-matrix(rep(0,length(n@Mesh)),ncol=1)
+  S@r_M@Shear<-matrix(rep(0,length(n@Mesh)) ,ncol=1)
+
+  S@r_f@disp<-matrix(rep(0,length(n@Mesh))  ,ncol=1)
+  S@r_f@Moment<-matrix(rep(0,length(n@Mesh)),ncol=1)
+  S@r_f@Shear<-matrix(rep(0,length(n@Mesh)) ,ncol=1)
+
+
+  delta<-1
+  while (delta>0.01){
+    P<-matrix(pnorm(0,S@r_M@disp,S@r_f@disp),nrow = 1)
+    KL<-(P*n@K_f+(1-P)*n@K_a)
+    KL_in<-KL
+    KM<-rep(0,n@N)
+
+    j<-1
+    for (i in seq(1,length(Hing_i),by=2)){
+      KM  [j]<-sum(KL[Hing_i[i]:(Hing_i[i+1])]*arm*arm*dxs)
+      j<-j+1
+    }
+    KM[1]<-sum(KL[Hing_i[1]:(Hing_i[2])]*(arm+n@L_slab/2)^2*dxs)
+    KM[n@N]<-sum(KL[Hing_i[length(Hing_i)]:(Hing_i[length(Hing_i)-1])]*(arm-n@L_slab/2)^2*dxs)
+
+
+    for (i in seq(0,length(Hing_i)/2-1)){
+      M_rota<-M[i+1]/KM[i+1]
+      if (i==0){
+        S@r_M@disp[Hing_i[2*i+1]:Hing_i[2*i+2]]<-M_rota*(arm+n@L_slab/2)
+      }else if(i==n@N-1){
+        S@r_M@disp[Hing_i[2*i+1]:Hing_i[2*i+2]]<-M_rota*(arm-n@L_slab/2)
+      }else{
+        M_disp<-rep((sum(CpM[Hing_i[2*i+1]:Hing_i[2*i+2]])*n@dx-n@D*n@L_slab*1.5*98150)/(sum(KL[Hing_i[2*i+1]:Hing_i[2*i+2]])*n@dx),length(Hing_i[2*i+1]:Hing_i[2*i+2]))
+        S@r_M@disp[Hing_i[2*i+1]:Hing_i[2*i+2]]<-M_disp+M_rota*arm
+      }
+    }
+
+
+
+
+    S@r_M@disp<-matrix(S@r_M@disp,ncol=1)
+    S@r_M@Moment<-matrix(S@r_M@Moment,ncol=1)
+    S@r_M@Shear<-matrix(S@r_M@Shear,ncol=1)
+
+    tmp<-matrix(seq(-1,1,length.out=(n@L_slab/n@dx+1)),nrow=1)
+    tmp<-tmp/sqrt(sum(tmp^2*dxs)/n@L_slab)
+
+
+
+    for (i in seq(nrow(w_n))){
+      if ((i %% 2) == 0) {
+        j<-i/2
+        phi[i,Hing_i[2*j+1]:(Hing_i[2*j+2])]<-1
+        w_n[i]<-sqrt((sum(KL[Hing_i[2*j+1]:(Hing_i[2*j+2]-1)])*n@dx)/(n@D*n@L_slab*1.5*98150))
+        #print(i)
+      }else {
+        j<-(i-1)/2
+        if (i==1){phi[i,Hing_i[2*j+1]:(Hing_i[2*j+2])]<-(tmp-tmp[1])}
+        else if (i==nrow(w_n)){phi[i,Hing_i[2*j+1]:(Hing_i[2*j+2])]<-(tmp-tmp[length(tmp)])}
+        else{phi[i,Hing_i[2*j+1]:(Hing_i[2*j+2])]<-tmp}
+        w_n[i]<-sqrt((KM[j+1])/(sum(n@D*dxs*arm^2*1.5*98150)))
+      }
+    }
+
+
+
+    n@mode_shape@phi  <-  phi
+    n@mode_shape@D2phi<-D2phi
+    n@mode_shape@D3phi<-D3phi
+    n@mode_shape@w_n  <-  w_n
+
+    S@n<-n
+    S@CpM<-S@CpM
+    S@Cpf<-S@Cpf
+    S@Sff<-S@Sff
+
+    G <- Gcalc(n)
+    GM<-GMcalc(n)
+    GS<-GScalc(n)
+    Spectral_response <-fluccalc (Sff,n,G,GM,GS)
+    disp_f    = Varcalc(Spectral_response@disp,n@w_range,n@Mesh)
+    moment_f  = Varcalc(Spectral_response@Moment,n@w_range,n@Mesh)
+    Shear_f   = Varcalc(Spectral_response@Shear,n@w_range,n@Mesh)
+    fluc_responses<-new('response',
+                        disp=matrix(disp_f,ncol=1),
+                        Moment=matrix(moment_f,ncol=1),
+                        Shear=matrix(Shear_f,ncol=1)
+    )
+    S@s_r<-Spectral_response
+    S@r_f<-fluc_responses
+
+    P<-matrix(pnorm(0,S@r_M@disp,S@r_f@disp),nrow = 1)
+    KL<-(P*n@K_f+(1-P)*n@K_a)
+    DDD<-(KL-KL_in)/n@K_a
+    delta<-sqrt((DDD) %*% t(DDD)/length(DDD))
+    #print(delta)
+    clc()
+    print('finding response of 2DOF')
+    pb <- txtProgressBar(min = 0,      # Minimum value of the progress bar
+                         max = 100,    # Maximum value of the progress bar
+                         style = 3,    # Progress bar style (also available style = 1 and style = 2)
+                         width = 50,   # Progress bar width. Defaults to getOption("width")
+                         char = "=",
+                         title = 'Nonlinearity solving...')   # Character used to create the bar
+    jjj<-100-round(100*(delta-0.05)/delta,2)
+    if (round(100*(delta-0.05)/delta,2)<=0){jjj<-100}
+    setTxtProgressBar(pb, jjj,title = "solving nonlinearity")
+    close(pb)
+
+
+    p1<-ggplot()
+    for(i in seq(0,n@N-1)){
+      p1<-p1+
+        geom_line(mapping=aes_string(x=S@n@Mesh[Hing_i[2*i+1]:Hing_i[2*i+2]], y=S@r_M@disp[Hing_i[2*i+1]:Hing_i[2*i+2]]))+
+        geom_ribbon(aes_string(x=S@n@Mesh[Hing_i[2*i+1]:Hing_i[2*i+2]],ymin =S@r_M@disp[Hing_i[2*i+1]:Hing_i[2*i+2]]-2.56*S@r_f@disp[Hing_i[2*i+1]:Hing_i[2*i+2]], ymax = S@r_M@disp[Hing_i[2*i+1]:Hing_i[2*i+2]]+2.56*S@r_f@disp[Hing_i[2*i+1]:Hing_i[2*i+2]]), alpha = 0.2)
+    }
+
+    print(
+      p1+
+        geom_line(mapping=aes(x=c(0,n@L), y=c(0,0)), linetype="dashed", color = "blue")+
+        theme_minimal()+
+        xlab('')+
+        ylab('displacements (m)')
+    )
+    max_F<-max(matrix(S@r_M@disp,nrow=1)+2.56*matrix(S@r_f@disp,nrow=1))
+
+    if (max_F>10){
+      print('slab failed')
+      break
+    }
+
+
+
+  }
+
+
+  return(S)
+
+
+}
+
+Kcalc_MDOF<-function(n,P,Mesh,Hing_i){
+  EI=n@EI
+  K  <-matrix(0,nrow = 2*length(Mesh),ncol = 2*length(Mesh))
+  j=seq(4)
+
+  for (i in seq(length(Mesh)-1)){
+    if (i!=1){
+      L=(Mesh[i+1]-Mesh[i-1])/2
+    }else{
+      L=(Mesh[2]-Mesh[1])/2
+    }
+    if (!is.element(i,Hing_i[seq(2,length(Hing_i),by=2)])){
+      K[j,j]  <-K[j,j]+
+        3*EI/L^3*matrix(c(12,6*L,-12,6*L,6*L,4*L^2,-6*L,2*L^2,-12,-6*L,12,-6*L,6*L,2*L^2,-6*L,4*L^2),nrow = 4,ncol = 4)+
+        (P[i]*n@K_f+(1-P[i])*n@K_a)*L/420*matrix(c(156,22*L,54,-13*L^2,22*L,4*L^2,13*L,-13*L^2,54,13*L,156,-22*L^2,-13*L^2,-13*L^2,-22*L^2,4*L^2),nrow = 4,ncol = 4)
+    }
+    j=j+2
+  }
+  return(K)
+}
+
+Kcalc_MDOFCJ<-function(n,P,Mesh,Hing_i){
+  EI=n@EI
+  K  <-matrix(0,nrow = 2*length(Mesh),ncol = 2*length(Mesh))
+  j=seq(4)
+
+  for (i in seq(length(Mesh)-1)){
+    L=(Mesh[i+1]-Mesh[i])
+    K[j,j]  <-K[j,j]+
+      3*EI/L^3*matrix(c(12,6*L,-12,6*L,6*L,4*L^2,-6*L,2*L^2,-12,-6*L,12,-6*L,6*L,2*L^2,-6*L,4*L^2),nrow = 4,ncol = 4)+
+      (P[i]*n@K_f+(1-P[i])*n@K_a)*L/420*matrix(c(156,22*L,54,-13*L^2,22*L,4*L^2,13*L,-13*L^2,54,13*L,156,-22*L^2,-13*L^2,-13*L^2,-22*L^2,4*L^2),nrow = 4,ncol = 4)
+    j=j+2
+  }
+  return(K)
+}
+
+
+Kcalc_MDOFCSJ<-function(n,P,Mesh,Hing_i){
+  EI=n@EI
+  K  <-matrix(0,nrow = 2*length(Mesh),ncol = 2*length(Mesh))
+  j=seq(4)
+
+  for (i in seq(length(Mesh)-1)){
+    if (i!=1){
+      L=(Mesh[i+1]-Mesh[i-1])/2
+    }else{
+      L=(Mesh[2]-Mesh[1])/2
+    }
+    if (is.element(i,Hing_i)){
+      K[j,j]  <-K[j,j]+
+        3*EI/L^3*matrix(c(1,L,-1,0,L,L^2,-L,0,-1,-L,1,0,0,0,0,0),nrow = 4,ncol = 4)+
+        (P[i]*n@K_f+(1-P[i])*n@K_a)*L/420*matrix(c(156,22*L,54,-13*L^2,22*L,4*L^2,13*L,-13*L^2,54,13*L,156,-22*L^2,-13*L^2,-13*L^2,-22*L^2,4*L^2),nrow = 4,ncol = 4)
+    }else{
+      K[j,j]  <-K[j,j]+
+        3*EI/L^3*matrix(c(12,6*L,-12,6*L,6*L,4*L^2,-6*L,2*L^2,-12,-6*L,12,-6*L,6*L,2*L^2,-6*L,4*L^2),nrow = 4,ncol = 4)+
+        (P[i]*n@K_f+(1-P[i])*n@K_a)*L/420*matrix(c(156,22*L,54,-13*L^2,22*L,4*L^2,13*L,-13*L^2,54,13*L,156,-22*L^2,-13*L^2,-13*L^2,-22*L^2,4*L^2),nrow = 4,ncol = 4)
+    }
+    j=j+2
+  }
+  return(K)
+}
+
+
+
+Meancalc_MDOF<-function(n,Forces,P){
+  require('FluMoDL')
+
+  ttt<-10
+  #indx<-sort(c(seq(length(n@Mesh)),Hing_i[c(-1,-length(Hing_i))]))
+
+  Hing_i<-which(abs((n@Mesh+0.0001) %% n@L_slab) <= n@dx/2)
+  indx<-sort(c(seq(length(n@Mesh)),Hing_i[c(-1,-length(Hing_i))]))
+
+
+
+  kh<-1
+  indx2<-c()
+  el<-0
+  Mesh<-c()
+  for (ih in seq(n@N)){
+    for (jh in seq(n@L_slab/n@dx)){
+      for (hh in seq(ttt)){
+        Mesh<-c(Mesh,el)
+        el<-el+n@dx/ttt
+      }
+      indx2<-c(indx2,kh)
+      kh<-kh+ttt
+    }
+    Mesh<-c(Mesh,el)
+    indx2<-c(indx2,kh)
+    kh<-kh+1
+  }
+
+
+  Hing_i2<-which(abs((Mesh+0.0001) %% n@L_slab) <= n@dx/(2*ttt))
+
+  P2=matrix(rep(NA,length(Mesh)),ncol=1)
+  Hing_i<-which(abs((n@Mesh+0.000001) %% n@L_slab) <= n@dx/2)
+
+
+  Forces2=matrix(rep(NA,length(Mesh)),ncol = 1)
+  P2=matrix(rep(NA,length(Mesh)),ncol=1)
+
+
+  Forces2[indx2]<-Forces
+  P2[indx2]<-P
+
+
+
+
+  Forces2<-linterp(Forces2,max_allow = NULL)
+  P<-linterp(P2,max_allow = NULL)
+
+  U_out<-matrix(rep(0,2*length(Mesh)),nrow=1)
+
+  Forces<--Fcalc(Forces2,Mesh)
+  K<-Kcalc_MDOF(n,P,Mesh,Hing_i2)
+
+  FDOF<-c(seq(2,2*length(Mesh)-2),2*length(Mesh))
+
+  U_out[FDOF]<-solve(K[FDOF,FDOF],(Forces[FDOF]),tol=0)
+
+  F1<-U_out%*%K-t(Forces)
+
+  disp  <-U_out[seq(1,length(U_out),by=2)]
+  Rota  <-U_out[seq(2,length(U_out),by=2)]
+  Shear <-F1[seq(1,length(U_out),by=2)]
+  Moment<-F1[seq(2,length(U_out),by=2)]
+
+  H_i<-seq(1,length(Mesh))
+  H_i<-H_i[Mesh %% n@L_slab < (Mesh[2]-Mesh[1])/2]
+
+  L=Mesh[2]-Mesh[1]
+  d=matrix(c(disp[1], Rota[1], disp[2], Rota[2]),ncol = 1)
+  B =matrix(c(-6/L^2,-4/L ,6/L^2  ,-2/L ),nrow=1)
+  C =matrix(c(12/L^3,6/L^2,-12/L^3,6/L^2),nrow=1)
+  Moment[1]=0
+  Shear [1]=n@EI*C%*%d
+
+  for (i in seq(2,length(Mesh))){
+    L=Mesh[i]-Mesh[i-1]
+    d=matrix(c(disp[i-1], Rota[i-1], disp[i], Rota[i]),ncol = 1)
+    B=matrix(c(6/L^2,  2/L,  -6/L^2,  4/L),nrow = 1)
+    C=matrix(c(12/L^3, 6/L^2, -12/L^3, 6/L^2),nrow = 1)
+    if (is.element(i,Hing_i2)){
+      Moment[i]=0
+      Shear [i]=Shear[i]
+    }else{
+      Moment[i]=n@EI*B%*%d
+      Shear [i]=n@EI*C%*%d
+    }
+  }
+
+  Shear=matrix(Shear[indx2],ncol=1)
+  Moment=matrix(Moment[indx2],ncol=1)
+  disp=matrix(disp[indx2],nrow=1)
+  Rota=matrix(disp[indx2],nrow=1)
+
+  response<-new("response",
+                disp=disp,
+                Moment=Moment,
+                Shear=Shear
+  )
+  return (response)
+}
+
+Meancalc_MDOFCJ<-function(n,Forces,P){
+  require('FluMoDL')
+
+  ttt<-10
+  #indx<-sort(c(seq(length(n@Mesh)),Hing_i[c(-1,-length(Hing_i))]))
+
+  Hing_i<-which(abs((n@Mesh+0.0001) %% n@L_slab) <= n@dx/2)
+  indx<-sort(c(seq(length(n@Mesh)),Hing_i[c(-1,-length(Hing_i))]))
+
+
+
+
+  kh<-1
+  indx2<-c()
+  el<-0
+  Mesh<-c()
+  for (ih in seq(n@N)){
+    for (jh in seq(n@L_slab/n@dx)){
+      for (hh in seq(ttt)){
+        Mesh<-c(Mesh,el)
+        el<-el+n@dx/ttt
+      }
+      indx2<-c(indx2,kh)
+      kh<-kh+ttt
+    }
+  }
+  Mesh<-c(Mesh,n@L)
+  Hing_i2<-which(abs((Mesh+0.0001) %% n@L_slab) <= n@dx/(2*ttt))
+
+  indx2<-c(indx2,length(Mesh))
+
+  P2=matrix(rep(NA,length(Mesh)),ncol=1)
+  Hing_i<-which(abs((n@Mesh+0.000001) %% n@L_slab) <= n@dx/2)
+
+
+  Forces2=matrix(rep(NA,length(Mesh)),ncol = 1)
+  P2=matrix(rep(NA,length(Mesh)),ncol=1)
+
+
+  Forces2[indx2]<-Forces
+  P2[indx2]<-P
+
+
+
+
+
+  Forces2<-linterp(Forces2,max_allow = NULL)
+  P<-linterp(P2,max_allow = NULL)
+
+  U_out<-matrix(rep(0,2*length(Mesh)),nrow=1)
+
+  Forces<--Fcalc(Forces2,Mesh)
+
+  K<-Kcalc_MDOFCJ(n,P,Mesh,Hing_i2)
+
+  FDOF<-c(seq(2,2*length(Mesh)-2),2*length(Mesh))
+
+  U_out[FDOF]<-solve(K[FDOF,FDOF],(Forces[FDOF]),tol=0)
+
+  F1<-U_out%*%K-t(Forces)
+
+  disp  <-U_out[seq(1,length(U_out),by=2)]
+  Rota  <-U_out[seq(2,length(U_out),by=2)]
+  Shear <-F1[seq(1,length(U_out),by=2)]
+  Moment<-F1[seq(2,length(U_out),by=2)]
+
+  H_i<-seq(1,length(Mesh))
+  H_i<-H_i[Mesh %% n@L_slab < (Mesh[2]-Mesh[1])/2]
+
+  L=Mesh[2]-Mesh[1]
+  d=matrix(c(disp[1], Rota[1], disp[2], Rota[2]),ncol = 1)
+  B =matrix(c(-6/L^2,-4/L ,6/L^2  ,-2/L ),nrow=1)
+  C =matrix(c(12/L^3,6/L^2,-12/L^3,6/L^2),nrow=1)
+  Moment[1]=0
+  Shear [1]=n@EI*C%*%d
+
+  for (i in seq(2,length(Mesh))){
+    L=Mesh[i]-Mesh[i-1]
+    d=matrix(c(disp[i-1], Rota[i-1], disp[i], Rota[i]),ncol = 1)
+    B=matrix(c(6/L^2,  2/L,  -6/L^2,  4/L),nrow = 1)
+    C=matrix(c(12/L^3, 6/L^2, -12/L^3, 6/L^2),nrow = 1)
+    if (is.element(i,Hing_i2)){
+      Moment[i]=0
+      Shear [i]=Shear[i]
+    }else{
+      Moment[i]=n@EI*B%*%d
+      Shear [i]=n@EI*C%*%d
+    }
+  }
+
+  Shear=matrix(Shear[indx2],ncol=1)
+  Moment=matrix(Moment[indx2],ncol=1)
+  disp=matrix(disp[indx2],nrow=1)
+  Rota=matrix(disp[indx2],nrow=1)
+
+  response<-new("response",
+                disp=disp,
+                Moment=Moment,
+                Shear=Shear
+  )
+  return (response)
+}
+
+Meancalc_MDOFCSJ<-function(n,Forces,P){
+  require('FluMoDL')
+
+  ttt<-10
+  #indx<-sort(c(seq(length(n@Mesh)),Hing_i[c(-1,-length(Hing_i))]))
+
+  Hing_i<-which(abs((n@Mesh+0.0001) %% n@L_slab) <= n@dx/2)
+  indx<-sort(c(seq(length(n@Mesh)),Hing_i[c(-1,-length(Hing_i))]))
+
+
+  kh<-1
+  indx2<-c()
+  el<-0
+  Mesh<-c()
+  for (ih in seq(n@N)){
+    for (jh in seq(n@L_slab/n@dx)){
+      for (hh in seq(ttt)){
+        Mesh<-c(Mesh,el)
+        el<-el+n@dx/ttt
+      }
+      indx2<-c(indx2,kh)
+      kh<-kh+ttt
+    }
+  }
+  Mesh<-c(Mesh,n@L)
+  Hing_i2<-which(abs((Mesh+0.0001) %% n@L_slab) <= n@dx/(2*ttt))
+
+  indx2<-c(indx2,length(Mesh))
+
+  P2=matrix(rep(NA,length(Mesh)),ncol=1)
+  Hing_i<-which(abs((n@Mesh+0.000001) %% n@L_slab) <= n@dx/2)
+
+
+  Forces2=matrix(rep(NA,length(Mesh)),ncol = 1)
+  P2=matrix(rep(NA,length(Mesh)),ncol=1)
+
+
+  Forces2[indx2]<-Forces
+  P2[indx2]<-P
+
+
+  Forces2<-linterp(Forces2,max_allow = NULL)
+  P<-linterp(P2,max_allow = NULL)
+
+  U_out<-matrix(rep(0,2*length(Mesh)),nrow=1)
+
+  Forces<--Fcalc(Forces2,Mesh)
+
+  K<-Kcalc_MDOFCSJ(n,P,Mesh,Hing_i2)
+
+  FDOF<-c(seq(2,2*length(Mesh)-2),2*length(Mesh))
+
+  U_out[FDOF]<-solve(K[FDOF,FDOF],(Forces[FDOF]),tol=0)
+
+  F1<-U_out%*%K-t(Forces)
+
+  disp  <-U_out[seq(1,length(U_out),by=2)]
+  Rota  <-U_out[seq(2,length(U_out),by=2)]
+  Shear <-F1[seq(1,length(U_out),by=2)]
+  Moment<-F1[seq(2,length(U_out),by=2)]
+
+  H_i<-seq(1,length(Mesh))
+  H_i<-H_i[Mesh %% n@L_slab < (Mesh[2]-Mesh[1])/2]
+
+  L=Mesh[2]-Mesh[1]
+  d=matrix(c(disp[1], Rota[1], disp[2], Rota[2]),ncol = 1)
+  B =matrix(c(-6/L^2,-4/L ,6/L^2  ,-2/L ),nrow=1)
+  C =matrix(c(12/L^3,6/L^2,-12/L^3,6/L^2),nrow=1)
+  Moment[1]=0
+  Shear [1]=n@EI*C%*%d
+
+  for (i in seq(2,length(Mesh))){
+    L=Mesh[i]-Mesh[i-1]
+    d=matrix(c(disp[i-1], Rota[i-1], disp[i], Rota[i]),ncol = 1)
+    B=matrix(c(6/L^2,  2/L,  -6/L^2,  4/L),nrow = 1)
+    C=matrix(c(12/L^3, 6/L^2, -12/L^3, 6/L^2),nrow = 1)
+    if (is.element(i,Hing_i2)){
+      Moment[i]=0
+      Shear [i]=Shear[i]
+    }else{
+      Moment[i]=n@EI*B%*%d
+      Shear [i]=n@EI*C%*%d
+    }
+  }
+
+  Shear=matrix(Shear[indx2],ncol=1)
+  Moment=matrix(Moment[indx2],ncol=1)
+  disp=matrix(disp[indx2],nrow=1)
+  Rota=matrix(disp[indx2],nrow=1)
+
+  response<-new("response",
+                disp=disp,
+                Moment=Moment,
+                Shear=Shear
+  )
+  return (response)
+}
+
+
+
+
+Mcalc_MDOF<-function(n,Mesh,Hing_i){
+  M<-matrix(0,nrow=2*length(Mesh),ncol = 2*length(Mesh))
+  j=seq(4)
+  for (i in seq(length(Mesh)-1)){
+    if (i !=1){
+      L<-(Mesh[i+1]-Mesh[i-1])/2
+    }else{
+      L<-(Mesh[2]-Mesh[1])/2
+    }
+    if (!is.element(i,Hing_i[seq(2,length(Hing_i),by=2)])){
+      M[j,j]=M[j,j]+n@m/420*L*matrix(c(156,-22*L,54,13*L,-22*L,4*L^2,-13*L,-3*L^2,54,-13*L,156,22*L,13*L,-3*L^2,22*L,4*L^2),ncol=4,nrow=4)
+      #M[j,j]=M[j,j]+n@m*L/2*matrix(c(1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0),nrow = 4, ncol = 4)
+    }
+    j<-j+2
+  }
+  return(M)
+}
+
+
+response_MDOF<-function(S){
+  #calling the inputs
+  CpM<-S@CpM
+  Cpf<-S@Cpf
+  Sff<-S@Sff
+  n<-S@n
+  Hing_i<-which(abs((n@Mesh+0.0001) %% n@L_slab) <= n@dx/2)
+  indx<-sort(c(seq(length(n@Mesh)),Hing_i[c(-1,-length(Hing_i))]))
+  n@Mesh<-n@Mesh[indx]
+  CpM<-CpM[indx]
+  Cpf<-Cpf[indx]
+  Sff<-Sff[indx,indx,]
+  Hing_i<-which(abs((n@Mesh+0.0001) %% n@L_slab) <= n@dx/2)
+
+
+
+  dxs<-c(n@dx/2,rep(n@dx,n@L_slab/n@dx-1),n@dx/2)
+
+  S@r_M@disp<-matrix(rep(0,length(n@Mesh))  ,ncol=1)
+  S@r_M@Moment<-matrix(rep(0,length(n@Mesh)),ncol=1)
+  S@r_M@Shear<-matrix(rep(0,length(n@Mesh)) ,ncol=1)
+
+  S@r_f@disp<-matrix(rep(0,length(n@Mesh))  ,ncol=1)
+  S@r_f@Moment<-matrix(rep(0,length(n@Mesh)),ncol=1)
+  S@r_f@Shear<-matrix(rep(0,length(n@Mesh)) ,ncol=1)
+
+
+
+
+  intr<-0
+  delta<-1
+  while (delta>0.05){
+
+    P<-matrix(pnorm(0,S@r_M@disp,S@r_f@disp),nrow = 1)
+    KL<-matrix((P*n@K_f+(1-P)*n@K_a),nrow=1)
+    KL_in<-KL
+
+    S@r_M<-Meancalc_MDOF(n,(CpM+n@D*1.5*98150),P)
+
+    ttt<-10
+    #indx<-sort(c(seq(length(n@Mesh)),Hing_i[c(-1,-length(Hing_i))]))
+
+
+
+    kh<-1
+    indx2<-c()
+    el<-0
+    Mesh<-c()
+    for (ih in seq(n@N)){
+      for (jh in seq(n@L_slab/n@dx)){
+        for (hh in seq(ttt)){
+          Mesh<-c(Mesh,el)
+          el<-el+n@dx/ttt
+        }
+        indx2<-c(indx2,kh)
+        kh<-kh+ttt
+      }
+      Mesh<-c(Mesh,el)
+      indx2<-c(indx2,kh)
+      kh<-kh+1
+    }
+    Hing_i2<-which(abs((Mesh+0.0001) %% n@L_slab) <= n@dx/(2*ttt))
+
+    P2=matrix(rep(NA,length(Mesh)),ncol=1)
+    Hing_i<-which(abs((n@Mesh+0.000001) %% n@L_slab) <= n@dx/2)
+
+    P2[indx2]<-P
+    P2<-linterp(P2,max_allow = NULL)
+
+    K<-Kcalc_MDOF(n,P2,Mesh,Hing_i2)
+    M<-Mcalc_MDOF(n,Mesh,Hing_i2)
+
+    phi<-matrix(0,nrow=2*length(Mesh),ncol = 2*length(Mesh))
+    D2phi<-matrix(0,nrow=2*length(Mesh),ncol = 2*length(Mesh))
+    D3phi<-matrix(0,nrow=2*length(Mesh),ncol = 2*length(Mesh))
+    w_n<-matrix(Inf,nrow=2*length(Mesh),ncol=1)
+
+    FDOF<-c(seq(2,2*length(Mesh)-2),2*length(Mesh))
+
+    print('solving eigenvalues problem ...')
+    A<-solve(K[FDOF,FDOF],tol=0)%*%M[FDOF,FDOF]
+    a<-eigen(A)
+
+
+    w_n[FDOF]<-sqrt(abs(1/a$values))
+    phi[FDOF,FDOF]<-a$vectors
+
+    phi<-phi[,which(w_n<max(n@w_range))]
+    w_n<-matrix(w_n[which(w_n<max(n@w_range))],ncol=1)
+
+    NN<-dim(phi)
+    M=rep(0,NN[2])
+    for (i in seq(1,NN[2])){
+      M[i]=sum(phi[,i]*phi[,i]*n@dx/ttt)
+      phi[,i]  =  phi[,i]/sqrt(M[i])*sqrt(n@L_slab)
+    }
+
+
+    phi<-phi[sort(c(2*indx2-1,2*indx2)),]
+
+
+
+    n@mode_shape@phi  <-  t(phi[seq(1,nrow(phi),by=2),])
+    n@mode_shape@D2phi<-t(D2phi[seq(1,nrow(D2phi),by=2),])
+    n@mode_shape@D3phi<-t(D3phi[seq(1,nrow(D3phi),by=2),])
+    n@mode_shape@w_n  <-  w_n
+
+
+
+
+    S@n<-n
+    S@CpM<-S@CpM
+    S@Cpf<-S@Cpf
+    S@Sff<-S@Sff
+
+    G <- Gcalc(n)*n@L/n@L_slab
+    GM<-GMcalc(n)*n@L/n@L_slab
+    GS<-GScalc(n)*n@L/n@L_slab
+    Spectral_response <-fluccalc (Sff,n,G,GM,GS)
+    disp_f    = Varcalc(Spectral_response@disp,n@w_range,n@Mesh)
+    moment_f  = Varcalc(Spectral_response@Moment,n@w_range,n@Mesh)
+    Shear_f   = Varcalc(Spectral_response@Shear,n@w_range,n@Mesh)
+    fluc_responses<-new('response',
+                        disp=matrix(disp_f,ncol=1),
+                        Moment=matrix(moment_f,ncol=1),
+                        Shear=matrix(Shear_f,ncol=1)
+    )
+    S@s_r<-Spectral_response
+    S@r_f<-fluc_responses
+
+    INDX3<-which((abs(S@r_M@disp)+2.56*matrix(S@r_f@disp,nrow=1))>0.85*(max(abs(S@r_M@disp)+2.56*matrix(S@r_f@disp,nrow=1))))
+
+    intr<-intr+1
+    if (intr>10){break}
+
+    P<-matrix(pnorm(0,S@r_M@disp,S@r_f@disp),nrow = 1)
+    KL<-matrix((P*n@K_f+(1-P)*n@K_a),nrow=1)
+
+    DDD<-matrix((KL[INDX3]-KL_in[INDX3])/n@K_a,nrow = 1)
+    delta<-sqrt((DDD) %*% t(DDD)/length(DDD))
+
+    clc()
+    print('finding response of MDOF')
+    pb <- txtProgressBar(min = 0,      # Minimum value of the progress bar
+                         max = 100,    # Maximum value of the progress bar
+                         style = 3,    # Progress bar style (also available style = 1 and style = 2)
+                         width = 50,   # Progress bar width. Defaults to getOption("width")
+                         char = "=",
+                         title = 'Nonlinearity solving...')   # Character used to create the bar
+    jjj<-100-round(100*(delta-0.05)/delta,2)
+    if (round(100*(delta-0.05)/delta,2)<=0){jjj<-100}
+    setTxtProgressBar(pb, jjj,title = "solving nonlinearity")
+    close(pb)
+
+
+
+    p1<-ggplot()
+    for(i in seq(0,n@N-1)){
+      p1<-p1+
+        geom_line(mapping=aes_string(x=S@n@Mesh[Hing_i[2*i+1]:Hing_i[2*i+2]], y=S@r_M@disp[Hing_i[2*i+1]:Hing_i[2*i+2]]))+
+        geom_ribbon(aes_string(x=S@n@Mesh[Hing_i[2*i+1]:Hing_i[2*i+2]],ymin =S@r_M@disp[Hing_i[2*i+1]:Hing_i[2*i+2]]-2.56*S@r_f@disp[Hing_i[2*i+1]:Hing_i[2*i+2]], ymax = S@r_M@disp[Hing_i[2*i+1]:Hing_i[2*i+2]]+2.56*S@r_f@disp[Hing_i[2*i+1]:Hing_i[2*i+2]]), alpha = 0.2)
+    }
+
+    print(
+      p1+
+        geom_line(mapping=aes(x=c(0,n@L), y=c(0,0)), linetype="dashed", color = "blue")+
+        theme_minimal()+
+        xlab('')+
+        ylab('displacements (m)')
+    )
+    max_F<-max(matrix(S@r_M@disp,nrow=1)+2.56*matrix(S@r_f@disp,nrow=1))
+
+    if (max_F>10){
+      print('slab failed')
+      break
+    }
+
+
+  }
+
+  close(pb)
+  return(S)
+
+
+}
+
+
+response_MDOF_SKCJ<-function(S){
+  #calling the inputs
+  CpM<-S@CpM
+  Cpf<-S@Cpf
+  Sff<-S@Sff
+  n<-S@n
+  Hing_i<-which(abs((n@Mesh+0.0001) %% n@L_slab) <= n@dx/2)
+  indx<-seq(length(n@Mesh))
+  n@Mesh<-n@Mesh[indx]
+  CpM<-CpM[indx]
+  Cpf<-Cpf[indx]
+  Sff<-Sff[indx,indx,]
+
+
+
+  dxs<-c(n@dx/2,rep(n@dx,n@L_slab/n@dx-1),n@dx/2)
+
+  S@r_M@disp<-matrix(rep(0,length(n@Mesh))  ,ncol=1)
+  S@r_M@Moment<-matrix(rep(0,length(n@Mesh)),ncol=1)
+  S@r_M@Shear<-matrix(rep(0,length(n@Mesh)) ,ncol=1)
+
+  S@r_f@disp<-matrix(rep(0,length(n@Mesh))  ,ncol=1)
+  S@r_f@Moment<-matrix(rep(0,length(n@Mesh)),ncol=1)
+  S@r_f@Shear<-matrix(rep(0,length(n@Mesh)) ,ncol=1)
+
+
+
+
+  intr<-0
+  delta<-1
+  while (delta>0.05){
+
+    P<-matrix(pnorm(0,S@r_M@disp,S@r_f@disp),nrow = 1)
+    KL<-matrix((P*n@K_f+(1-P)*n@K_a),nrow=1)
+    KL_in<-KL
+
+    S@r_M<-Meancalc_MDOFCJ(n,(CpM+n@D*1.5*98150),P)
+
+    ttt<-10
+    #indx<-sort(c(seq(length(n@Mesh)),Hing_i[c(-1,-length(Hing_i))]))
+
+
+
+    kh<-1
+    indx2<-c()
+    el<-0
+    Mesh<-c()
+    for (ih in seq(n@N)){
+      for (jh in seq(n@L_slab/n@dx)){
+        for (hh in seq(ttt)){
+          Mesh<-c(Mesh,el)
+          el<-el+n@dx/ttt
+        }
+        indx2<-c(indx2,kh)
+        kh<-kh+ttt
+      }
+    }
+    Mesh<-c(Mesh,n@L)
+    indx2<-c(indx2,length(Mesh))
+
+    Hing_i2<-which(abs((Mesh+0.0001) %% n@L_slab) <= n@dx/(2*ttt))
+
+    P2=matrix(rep(NA,length(Mesh)),ncol=1)
+    Hing_i<-which(abs((n@Mesh+0.000001) %% n@L_slab) <= n@dx/2)
+
+    P2[indx2]<-P
+    P2<-linterp(P2,max_allow = NULL)
+
+
+    K<-Kcalc_MDOFCJ(n,P2,Mesh,Hing_i2)
+    M<-Mcalc_MDOF(n,Mesh,Hing_i2)
+
+    phi<-matrix(0,nrow=2*length(Mesh),ncol = 2*length(Mesh))
+    D2phi<-matrix(0,nrow=2*length(Mesh),ncol = 2*length(Mesh))
+    D3phi<-matrix(0,nrow=2*length(Mesh),ncol = 2*length(Mesh))
+    w_n<-matrix(Inf,nrow=2*length(Mesh),ncol=1)
+
+    FDOF<-c(seq(2,2*length(Mesh)-2),2*length(Mesh))
+
+    print('solving eigenvalues problem ...')
+    A<-solve(K[FDOF,FDOF],tol=0)%*%M[FDOF,FDOF]
+    a<-eigen(A)
+
+
+    w_n[FDOF]<-sqrt(abs(1/a$values))
+    phi[FDOF,FDOF]<-a$vectors
+
+    phi<-phi[,which(w_n<max(n@w_range))]
+    w_n<-matrix(w_n[which(w_n<max(n@w_range))],ncol=1)
+
+    NN<-dim(phi)
+    M=rep(0,NN[2])
+    for (i in seq(1,NN[2])){
+      M[i]=sum(phi[,i]*phi[,i]*n@dx/ttt)
+      phi[,i]  =  phi[,i]/sqrt(M[i])*sqrt(n@L_slab)
+    }
+
+
+    phi<-phi[sort(c(2*indx2-1,2*indx2)),]
+
+
+
+    n@mode_shape@phi  <-  t(phi[seq(1,nrow(phi),by=2),])
+    n@mode_shape@D2phi<-t(D2phi[seq(1,nrow(D2phi),by=2),])
+    n@mode_shape@D3phi<-t(D3phi[seq(1,nrow(D3phi),by=2),])
+    n@mode_shape@w_n  <-  w_n
+
+
+
+
+    S@n<-n
+    S@CpM<-S@CpM
+    S@Cpf<-S@Cpf
+    S@Sff<-S@Sff
+
+    G <- Gcalc(n)*n@L/n@L_slab
+    GM<-GMcalc(n)*n@L/n@L_slab
+    GS<-GScalc(n)*n@L/n@L_slab
+    Spectral_response <-fluccalc (Sff,n,G,GM,GS)
+    disp_f    = Varcalc(Spectral_response@disp,n@w_range,n@Mesh)
+    moment_f  = Varcalc(Spectral_response@Moment,n@w_range,n@Mesh)
+    Shear_f   = Varcalc(Spectral_response@Shear,n@w_range,n@Mesh)
+    fluc_responses<-new('response',
+                        disp=matrix(disp_f,ncol=1),
+                        Moment=matrix(moment_f,ncol=1),
+                        Shear=matrix(Shear_f,ncol=1)
+    )
+    S@s_r<-Spectral_response
+    S@r_f<-fluc_responses
+
+    INDX3<-which((abs(S@r_M@disp)+2.56*matrix(S@r_f@disp,nrow=1))>0.85*(max(abs(S@r_M@disp)+2.56*matrix(S@r_f@disp,nrow=1))))
+
+    intr<-intr+1
+    if (intr>10){break}
+
+    P<-matrix(pnorm(0,S@r_M@disp,S@r_f@disp),nrow = 1)
+    KL<-matrix((P*n@K_f+(1-P)*n@K_a),nrow=1)
+
+    DDD<-matrix((KL[INDX3]-KL_in[INDX3])/n@K_a,nrow = 1)
+    delta<-sqrt((DDD) %*% t(DDD)/length(DDD))
+
+    clc()
+    print('finding response of MDOF_SKCJ')
+    pb <- txtProgressBar(min = 0,      # Minimum value of the progress bar
+                         max = 100,    # Maximum value of the progress bar
+                         style = 3,    # Progress bar style (also available style = 1 and style = 2)
+                         width = 50,   # Progress bar width. Defaults to getOption("width")
+                         char = "=",
+                         title = 'Nonlinearity solving...')   # Character used to create the bar
+    jjj<-100-round(100*(delta-0.05)/delta,2)
+    if (round(100*(delta-0.05)/delta,2)<=0){jjj<-100}
+    setTxtProgressBar(pb, jjj,title = "solving nonlinearity")
+    close(pb)
+
+
+
+    p1<-ggplot()
+    p1<-p1+
+      geom_line(mapping=aes_string(x=S@n@Mesh, y=S@r_M@disp))+
+      geom_ribbon(aes_string(x=S@n@Mesh,ymin =S@r_M@disp-2.56*matrix(S@r_f@disp,nrow=1), ymax = S@r_M@disp+2.56*matrix(S@r_f@disp,nrow=1)), alpha = 0.2)
+
+    print(
+      p1+
+        geom_line(mapping=aes(x=c(0,n@L), y=c(0,0)), linetype="dashed", color = "blue")+
+        theme_minimal()+
+        xlab('')+
+        ylab('displacements (m)')
+    )
+
+    max_F<-max(matrix(S@r_M@disp,nrow=1)+2.56*matrix(S@r_f@disp,nrow=1))
+
+    if (max_F>10){
+      print('slab failed')
+      break
+    }
+
+  }
+
+  close(pb)
+  return(S)
+
+
+}
+
+response_MDOF_SKCSJ<-function(S){
+  #calling the inputs
+  CpM<-S@CpM
+  Cpf<-S@Cpf
+  Sff<-S@Sff
+  n<-S@n
+  Hing_i<-which(abs((n@Mesh+0.0001) %% n@L_slab) <= n@dx/2)
+  indx<-seq(length(n@Mesh))
+  n@Mesh<-n@Mesh[indx]
+  CpM<-CpM[indx]
+  Cpf<-Cpf[indx]
+  Sff<-Sff[indx,indx,]
+  Hing_i<-which(abs((n@Mesh+0.0001) %% n@L_slab) <= n@dx/2)
+
+
+
+  dxs<-c(n@dx/2,rep(n@dx,n@L_slab/n@dx-1),n@dx/2)
+
+  S@r_M@disp<-matrix(rep(0,length(n@Mesh))  ,ncol=1)
+  S@r_M@Moment<-matrix(rep(0,length(n@Mesh)),ncol=1)
+  S@r_M@Shear<-matrix(rep(0,length(n@Mesh)) ,ncol=1)
+
+  S@r_f@disp<-matrix(rep(0,length(n@Mesh))  ,ncol=1)
+  S@r_f@Moment<-matrix(rep(0,length(n@Mesh)),ncol=1)
+  S@r_f@Shear<-matrix(rep(0,length(n@Mesh)) ,ncol=1)
+
+
+
+
+  intr<-0
+  delta<-1
+  while (delta>0.05){
+
+    P<-matrix(pnorm(0,S@r_M@disp,S@r_f@disp),nrow = 1)
+    KL<-matrix((P*n@K_f+(1-P)*n@K_a),nrow=1)
+    KL_in<-KL
+
+    S@r_M<-Meancalc_MDOFCSJ(n,(CpM+n@D*1.5*98150),P)
+
+    ttt<-10
+    #indx<-sort(c(seq(length(n@Mesh)),Hing_i[c(-1,-length(Hing_i))]))
+
+
+
+    kh<-1
+    indx2<-c()
+    el<-0
+    Mesh<-c()
+    for (ih in seq(n@N)){
+      for (jh in seq(n@L_slab/n@dx)){
+        for (hh in seq(ttt)){
+          Mesh<-c(Mesh,el)
+          el<-el+n@dx/ttt
+        }
+        indx2<-c(indx2,kh)
+        kh<-kh+ttt
+      }
+    }
+    Mesh<-c(Mesh,n@L)
+    indx2<-c(indx2,length(Mesh))
+
+    Hing_i2<-which(abs((Mesh+0.0001) %% n@L_slab) <= n@dx/(2*ttt))
+
+    P2=matrix(rep(NA,length(Mesh)),ncol=1)
+    Hing_i<-which(abs((n@Mesh+0.000001) %% n@L_slab) <= n@dx/2)
+
+    P2[indx2]<-P
+    P2<-linterp(P2,max_allow = NULL)
+
+    K<-Kcalc_MDOFCSJ(n,P2,Mesh,Hing_i2)
+    M<-Mcalc_MDOF(n,Mesh,Hing_i2)
+
+    phi<-matrix(0,nrow=2*length(Mesh),ncol = 2*length(Mesh))
+    D2phi<-matrix(0,nrow=2*length(Mesh),ncol = 2*length(Mesh))
+    D3phi<-matrix(0,nrow=2*length(Mesh),ncol = 2*length(Mesh))
+    w_n<-matrix(Inf,nrow=2*length(Mesh),ncol=1)
+
+    FDOF<-c(seq(2,2*length(Mesh)-2),2*length(Mesh))
+
+    print('solving eigenvalues problem ...')
+    A<-solve(K[FDOF,FDOF],tol=0)%*%M[FDOF,FDOF]
+    a<-eigen(A)
+
+
+    w_n[FDOF]<-sqrt(abs(1/a$values))
+    phi[FDOF,FDOF]<-a$vectors
+
+    phi<-phi[,which(w_n<max(n@w_range))]
+    w_n<-matrix(w_n[which(w_n<max(n@w_range))],ncol=1)
+
+    NN<-dim(phi)
+    M=rep(0,NN[2])
+    for (i in seq(1,NN[2])){
+      M[i]=sum(phi[,i]*phi[,i]*n@dx/ttt)
+      phi[,i]  =  phi[,i]/sqrt(M[i])*sqrt(n@L_slab)
+    }
+
+
+    phi<-phi[sort(c(2*indx2-1,2*indx2)),]
+
+
+
+    n@mode_shape@phi  <-  t(phi[seq(1,nrow(phi),by=2),])
+    n@mode_shape@D2phi<-t(D2phi[seq(1,nrow(D2phi),by=2),])
+    n@mode_shape@D3phi<-t(D3phi[seq(1,nrow(D3phi),by=2),])
+    n@mode_shape@w_n  <-  w_n
+
+
+
+
+    S@n<-n
+    S@CpM<-S@CpM
+    S@Cpf<-S@Cpf
+    S@Sff<-S@Sff
+
+    G <- Gcalc(n)*n@L/n@L_slab
+    GM<-GMcalc(n)*n@L/n@L_slab
+    GS<-GScalc(n)*n@L/n@L_slab
+    Spectral_response <-fluccalc (Sff,n,G,GM,GS)
+    disp_f    = Varcalc(Spectral_response@disp,n@w_range,n@Mesh)
+    moment_f  = Varcalc(Spectral_response@Moment,n@w_range,n@Mesh)
+    Shear_f   = Varcalc(Spectral_response@Shear,n@w_range,n@Mesh)
+    fluc_responses<-new('response',
+                        disp=matrix(disp_f,ncol=1),
+                        Moment=matrix(moment_f,ncol=1),
+                        Shear=matrix(Shear_f,ncol=1)
+    )
+    S@s_r<-Spectral_response
+    S@r_f<-fluc_responses
+
+    INDX3<-which((abs(S@r_M@disp)+2.56*matrix(S@r_f@disp,nrow=1))>0.85*(max(abs(S@r_M@disp)+2.56*matrix(S@r_f@disp,nrow=1))))
+
+    intr<-intr+1
+    if (intr>10){break}
+
+    P<-matrix(pnorm(0,S@r_M@disp,S@r_f@disp),nrow = 1)
+    KL<-matrix((P*n@K_f+(1-P)*n@K_a),nrow=1)
+
+    DDD<-matrix((KL[INDX3]-KL_in[INDX3])/n@K_a,nrow = 1)
+    delta<-sqrt((DDD) %*% t(DDD)/length(DDD))
+
+    clc()
+    print('finding response of MDOF_SKCSJ')
+    pb <- txtProgressBar(min = 0,      # Minimum value of the progress bar
+                         max = 100,    # Maximum value of the progress bar
+                         style = 3,    # Progress bar style (also available style = 1 and style = 2)
+                         width = 50,   # Progress bar width. Defaults to getOption("width")
+                         char = "=",
+                         title = 'Nonlinearity solving...')   # Character used to create the bar
+    jjj<-100-round(100*(delta-0.05)/delta,2)
+    if (round(100*(delta-0.05)/delta,2)<=0){jjj<-100}
+    setTxtProgressBar(pb, jjj,title = "solving nonlinearity")
+    close(pb)
+
+
+
+    p1<-ggplot()
+    p1<-p1+
+      geom_line(mapping=aes_string(x=S@n@Mesh, y=S@r_M@disp))+
+      geom_ribbon(aes_string(x=S@n@Mesh,ymin =S@r_M@disp-2.56*matrix(S@r_f@disp,nrow=1), ymax = S@r_M@disp+2.56*matrix(S@r_f@disp,nrow=1)), alpha = 0.2)
+
+    print(
+      p1+
+        geom_line(mapping=aes(x=c(0,n@L), y=c(0,0)), linetype="dashed", color = "blue")+
+        theme_minimal()+
+        xlab('')+
+        ylab('displacements (m)')
+    )
+    max_F<-max(matrix(S@r_M@disp,nrow=1)+2.56*matrix(S@r_f@disp,nrow=1))
+
+    if (max_F>10){
+      print('slab failed')
+      break
+    }
+
+  }
+
+  close(pb)
+  return(S)
+
+
+}
+
+
+random_structure<-function(S,
+                           c=0.1,
+                           D=seq(1,5,by=0.5),
+                           Spacing=c(0.5,1,1.5,2,2.5,3),
+                           diameter=c(0.0001,0.020,0.022,0.025,0.028,0.032,0.046),
+                           efective_length=2.5,
+                           K_f=3.91e+8
+){
+
+  S@n@D  <-D[sample(1:length(D), 1)]
+  N<-1/Spacing[sample(1:length(Spacing), 1)]
+  A<-diameter[sample(1:length(diameter), 1)]^2/4*pi
+  S@n@K_a<-2.068e+11*A*N/efective_length
+  S@n@K_f<-6e+10
+  print(S@n@K_a)
+  S@n@c=c
+  S@n@m<-15000*S@n@D*S@n@b
+
+  E=25*10^9
+  I=1/12*S@n@b*S@n@D^3
+  S@n@EI=E*I
+
+  return(S)
+}
+
+setClass(Class="st_solution",
+         representation(
+           S_SDOF="solution",
+           S_2DOF="solution",
+           S_MDOF="solution",
+           S_MDOF_SKCJ="solution",
+           S_MDOF_SKCSJ="solution"
+         )
+)
+
+
+slab_response<-function(S){
+  require('ggplot2')
+  S<-random_structure(S)
+  S@n@K_f<-S@n@K_a
+  S_SDOF      <-response_SDOF(S)
+  S_2DOF      <-response_2DOF(S)
+  S_MDOF      <-response_MDOF(S)
+  S_MDOF_SKCJ <-response_MDOF_SKCJ(S)
+  S_MDOF_SKCSJ<-response_MDOF_SKCSJ(S)
+  R           <-new("st_solution",
+                    S_SDOF=S_2DOF,
+                    S_2DOF=S_2DOF,
+                    S_MDOF=S_MDOF,
+                    S_MDOF_SKCJ=S_MDOF_SKCJ,
+                    S_MDOF_SKCSJ=S_MDOF_SKCSJ)
+
+  fl<-list.files(path='D:/new_file/random_loading/response')
+  filename=paste('D:/new_file/random_loading/response/responses_',length(fl)+1,'.Rdata',sep = "")
+  print(paste('saving',filename))
+  save(R,file=filename)
+
+  S@n@K_f<-6e+10
+  S_SDOF      <-response_SDOF(S)
+  S_2DOF      <-response_2DOF(S)
+  S_MDOF      <-response_MDOF(S)
+  S_MDOF_SKCJ <-response_MDOF_SKCJ(S)
+  S_MDOF_SKCSJ<-response_MDOF_SKCSJ(S)
+  RNL         <-new("st_solution",
+                    S_SDOF=S_2DOF,
+                    S_2DOF=S_2DOF,
+                    S_MDOF=S_MDOF,
+                    S_MDOF_SKCJ=S_MDOF_SKCJ,
+                    S_MDOF_SKCSJ=S_MDOF_SKCSJ)
+  print(paste('saving',filename))
+  save(R,RNL,file=filename)
+
+}
+
+
+
+draw_geo<-function(n,type='SK'){
+  require('ggplot2')
+
+  xscale<-1/n@H
+  yscale<-1/n@H
+
+
+  slab_up_x<-c(0,n@L)*xscale
+  slab_up_y<-c(n@D,n@D)*yscale
+
+  slab_dw_x<-c(0,n@L)*xscale
+  slab_dw_y<-c(0,0)*yscale
+
+  joints_x<-c()
+  joints_y<-c()
+  if (type=='NSK'){
+    for (i in 0:n@N){
+      joints_x <-c(joints_x,c(0, 0,  0,   0,  0,  0)+i*n@L_slab)
+      joints_y <-c(joints_y,c(0,0.2, 0.3, 0.7,0.8,1)*n@D)
+    }
+  }else if (type=='SK'){
+    for (i in 0:n@N){
+      joints_x <-c(joints_x,c(0,0  ,-0.2,-0.2,0  ,0)*n@D+i*n@L_slab)
+      joints_y <-c(joints_y,c(0,0.2, 0.3, 0.7,0.8,1)*n@D)
+    }
+  }else{
+    print('use SK and NSK for slab with shearkeys and without them, respectivly')
+  }
+  joints_x<-joints_x*xscale
+  joints_y<-joints_y*yscale
+
+
+  x_p<-n@Mesh[which.max(n@CpM_up)]*xscale
+  x_jet=seq(0.00,x_p,length.out=100)
+  y_jet=(-1/(x_p-0.00)^2*(x_jet-0.00)^2+1)*yscale/xscale
+
+
+  p1<-ggplot()+
+    geom_line(aes(x=slab_dw_x,y=slab_dw_y))+
+    geom_line(aes(x=slab_up_x,y=slab_up_y))
+
+  j<-1:6
+  for (i in 0:n@N){
+    p1<-p1+
+      geom_path(aes_string(x=joints_x[j]        ,y=joints_y[j]))
+    p1<-p1+
+      geom_path(aes_string(x=joints_x[j]+0.1/n@H,y=joints_y[j]))
+    j<-j+6
+  }
+
+  x_dam<-c( 0.0000,  0.0000, -0.0109, -0.0273, -0.0387, -0.0490, -0.0561, -0.0588, -0.0564, -0.0497, -0.0381, -0.0224,  0.0000,  0.0000, -0.0588, -0.0588, -0.0708, -0.0947, -0.1244, -0.1493, -0.1684, -0.1868, -0.1948, -0.2070, -0.2121, -0.2117, -0.2056, -0.1992, -0.0500, -0.0500)*n@H*xscale/4
+  y_dam<-c(-0.1961,  0.0000,  0.0666,  0.1496,  0.2214,  0.3088,  0.4036,  0.5098,  0.6110,  0.7036,  0.8022,  0.8965,  1.0000,  1.0588,  1.0588,  1.0000,  0.9720,  0.9118,  0.8265,  0.7425,  0.6646,  0.5708,  0.5192,  0.4066,  0.3055,  0.2088,  0.1050,  0.0442,  0.0196, -0.1961)*n@H*yscale
+
+  x=seq(-0.05,n@L/n@H,by=n@dx/n@H)
+  y=jitter(rep(n@Y/n@H,length(x)))
+
+  p1<-p1+
+    geom_line(aes(x=x,y=y),col='blue')+
+    geom_polygon(aes(x=x_dam,y=y_dam),fill='gray',col='black')+
+    geom_line(aes(x=x_jet,y=y_jet),col='blue')+
+    geom_path(aes(x=c(n@L/n@H,n@L/n@H,n@L/n@H+0.025,n@L/n@H),y=c(0,n@tw/n@H,0,0)))
+
+
+  return(p1)
+}
+
+
+
+
+time_history_calc<-function (x,n,timeline){
+  require(dplyr)
+  Cpf<-n@Cpf_up[which(abs(x-n@Mesh)<n@dx/2)]
+  CpM<-n@CpM_up[which(abs(x-n@Mesh)<n@dx/2)]
+  qk<-sample(seq(0,2*pi,by=0.01),length(n@w_range))
+  f<-n@w_range/2/pi
+  Sp<-rep(0,length(f))
+  Sp[f<25]<- 0.1584*f[f<25]^ -1   *Cpf^2
+  Sp[f>25]<-11.5690*f[f>25]^(-7/3)*Cpf^2
+
+  Sp<-Sp/(sum((Sp*(f[c(2:length(f),length(f))]-f[1:length(f)])))/Cpf^2)
+
+
+  Ak<-sqrt(Sp[1:length(f)]*(f[c(2:length(f),length(f))]-f[1:length(f)])*2)
+  P<-rep(0,length(timeline))
+  i<-1
+  for (t in timeline){
+    P[i]<-CpM+sum(Ak*sin(n@w_range*t+qk))
+    i<-i+1
+  }
+  return(P)
+}
+
+full_time_history<-function(n,t,theta=pi/4){
+  P<-matrix(NA,nrow = length(t),ncol= length(n@Mesh))
+  i<-1
+  for (x in n@Mesh){
+    P[,i]<-time_history_calc(x,n,t)
+    i<-i+1
+  }
+  P=matrix(P,nrow=1)[1,]/n@H/98150
+  x<-sort(rep(n@Mesh,length(t)))/n@H
+  t<-rep(t,length(n@Mesh))
+
+
+  df<-data.frame(x=x,P=P,t=t)
+
+
+
+
+  return(df)
+}
+
+
+
+
+
+
+
+#svgIn <- 'C:/Users/Admin/Desktop/ttt.svg'
+#svgOut <- 'driveRouteAnimated.R'
+#svg <-  XML::xmlParse(svgIn, useInternalNode=TRUE)
+
+#numPolylines <- length(XML::xpathApply(svg, "//*[local-name()='polyline']"))
+#polylineNames <- c(paste0('myPoly',1:(numPaths-1)))
+
+
+
+draw_loading_<-function(n,type='SK',theta=pi/4,z_tmp=-1){
+  require('ggplot2')
+
+  xscale<-1/n@H
+  yscale<-1/n@H
+
+
+  slab_up_x<-c(0,n@L)*xscale
+  slab_up_y<-c(n@D,n@D)*yscale
+
+  tmp<-rotation_plot(slab_up_x,slab_up_y,rep(z_tmp,length(slab_up_x)),theta = theta)
+  slab_up_x<-tmp$xr
+  slab_up_y<-tmp$yr
+
+
+  slab_dw_x<-c(0,n@L)*xscale
+  slab_dw_y<-c(0,0)*yscale
+  tmp<-rotation_plot(slab_dw_x,slab_dw_y,rep(z_tmp,length(slab_dw_x)),theta = theta)
+  slab_dw_x<-tmp$xr
+  slab_dw_y<-tmp$yr
+
+
+  joints_x<-c()
+  joints_y<-c()
+  if (type=='NSK'){
+    for (i in 0:n@N){
+      joints_x <-c(joints_x,c(0, 0,  0,   0,  0,  0)+i*n@L_slab)
+      joints_y <-c(joints_y,c(0,0.2, 0.3, 0.7,0.8,1)*n@D)
+    }
+  }else if (type=='SK'){
+    for (i in 0:n@N){
+      joints_x <-c(joints_x,c(0,0  ,-0.2,-0.2,0  ,0)*n@D+i*n@L_slab)
+      joints_y <-c(joints_y,c(0,0.2, 0.3, 0.7,0.8,1)*n@D)
+    }
+  }else{
+    print('use SK and NSK for slab with shearkeys and without them, respectivly')
+  }
+  joints_x<-joints_x*xscale
+  joints_y<-joints_y*yscale
+  tmp<-rotation_plot(joints_x,joints_y,rep(z_tmp,length(joints_x)),theta = theta)
+  joints_x<-tmp$xr
+  joints_y<-tmp$yr
+
+
+  x_p<-n@Mesh[which.max(n@CpM_up)]*xscale
+  x_jet=seq(0.00,x_p,length.out=100)
+  y_jet=(-1/(x_p-0.00)^2*(x_jet-0.00)^2+1)*yscale/xscale
+  tmp<-rotation_plot(x_jet,y_jet,rep(z_tmp,length(x_jet)),theta = theta)
+  x_jet<-tmp$xr
+  y_jet<-tmp$yr
+
+  p1<-ggplot()+
+    geom_line(aes(x=slab_dw_x,y=slab_dw_y))+
+    geom_line(aes(x=slab_up_x,y=slab_up_y))
+
+    j<-1:6
+    for (i in 0:n@N){
+      p1<-p1+
+        geom_path(aes_string(x=joints_x[j]        ,y=joints_y[j]))
+      p1<-p1+
+        geom_path(aes_string(x=joints_x[j],y=joints_y[j]))
+      j<-j+6
+    }
+
+    x_dam<-c( 0.0000,  0.0000, -0.0109, -0.0273, -0.0387, -0.0490, -0.0561, -0.0588, -0.0564, -0.0497, -0.0381, -0.0224,  0.0000,  0.0000, -0.0588, -0.0588, -0.0708, -0.0947, -0.1244, -0.1493, -0.1684, -0.1868, -0.1948, -0.2070, -0.2121, -0.2117, -0.2056, -0.1992, -0.0500, -0.0500)*n@L*xscale/4
+    y_dam<-c(-0.1961,  0.0000,  0.0666,  0.1496,  0.2214,  0.3088,  0.4036,  0.5098,  0.6110,  0.7036,  0.8022,  0.8965,  1.0000,  1.0588,  1.0588,  1.0000,  0.9720,  0.9118,  0.8265,  0.7425,  0.6646,  0.5708,  0.5192,  0.4066,  0.3055,  0.2088,  0.1050,  0.0442,  0.0196, -0.1961)*n@H*yscale
+    tmp<-rotation_plot(x_dam,y_dam,rep(z_tmp,length(x_dam)),theta = theta)
+    x_dam<-tmp$xr
+    y_dam<-tmp$yr
+
+    tail_x<-c(n@L/n@H,n@L/n@H,n@L/n@H+0.025,n@L/n@H)
+    tail_y<-c(0,n@tw/n@H,0,0)
+    tmp<-rotation_plot(tail_x,tail_y,rep(z_tmp,length(tail_x)),theta = theta)
+    tail_x<-tmp$xr
+    tail_y<-tmp$yr
+
+    mean_x<-n@Mesh/n@H
+    mean_y<-(n@CpM_up)/98150/n@H
+    tmp<-rotation_plot(mean_x,mean_y,rep(z_tmp,length(mean_x)),theta = theta)
+    mean_x<-tmp$xr
+    mean_y<-tmp$yr
+
+    rib_x<-n@Mesh/n@H
+    rib_y<-(n@CpM_up)/98150/n@H
+    tmp<-rotation_plot(rib_x,rib_y,rep(z_tmp,length(rib_x)),theta = theta)
+    rib_x<-tmp$xr
+    rib_y<-tmp$yr
+
+    rib_x<-n@Mesh/n@H
+    ymin <-(n@CpM_up-2.56*n@Cpf_up)/98150/n@H
+    tmp<-rotation_plot(rib_x,ymin,rep(z_tmp,length(rib_x)),theta = theta)
+    rib_x<-tmp$xr
+    ymin<-tmp$yr
+
+    rib_x<-n@Mesh/n@H
+    ymax <-(n@CpM_up+2.56*n@Cpf_up)/98150/n@H
+    tmp<-rotation_plot(rib_x,ymax,rep(z_tmp,length(rib_x)),theta = theta)
+    rib_x<-tmp$xr
+    ymax<-tmp$yr
+
+
+  p1<-p1+
+    geom_polygon(aes(x=x_dam,y=y_dam),fill='gray',col='black')+
+    geom_line(aes(x=x_jet,y=y_jet),col='blue')+
+    geom_path(aes(x=tail_x,y=tail_y))+
+    geom_line(aes(x=mean_x, y=mean_y))+
+    geom_ribbon(aes(x=rib_x, y=rib_y,ymin =ymin, ymax = ymax), alpha = 0.2)+
+    theme_void()+
+    xlab('')+
+    ylab('')+
+    ylim(-1,1.1)+
+    theme(legend.position="none")
+
+
+
+  return(p1)
+}
+
+
+rotation_plot<-function(x,y,z,theta=pi/4){
+  x<-x
+  y<-y
+  z<-z
+
+  df<-data.frame(x=x,y=y,z=z,xr=z*sin(theta)+x*cos(theta),yr=y-x*sin(theta))
+  return(df)
+}
+
+
+
+
+time_history_plot<-function(n,time,theta=pi/4,x_n=10,t_n=50){
+  require(dplyr)
+  x_p<-n@Mesh[which.max(n@CpM_up)]/n@H
+
+  xf<-c(n@Mesh[seq(1,length(n@Mesh),length.out=x_n)]/n@H,x_p)%>%sort()
+  zf<-seq(0,max(time),by=max(time)/t_n)
+  df<-full_time_history(n,time)%>%filter(x %in% xf)%>%filter(t %in% zf)
+  df<-rotation_plot(df$x,df$P,df$t,theta)
+  cl<-max(df$xr,df$yr)/10
+  df_FF<-df%>%filter(x==x_p)
+  ggplot()+
+    geom_line(aes(x=c(0,cl),y=c(0,0)),arrow=arrow(type = "closed"))+
+    geom_line(aes(x=c(0,0),y=c(0,cl)),arrow=arrow(type = "closed"))+
+    geom_line(aes(x=c(0,cl*cos(theta)),y=c(0,-cl*sin(theta))),arrow=arrow(type = "closed"))+
+    geom_line(aes(x=df$xr,y=df$yr,group=df$z))+
+    geom_line(aes(x=df$xr,y=df$yr,group=df$x),col='blue')+
+    geom_line(aes(x=df_FF$xr,y=df_FF$yr,group=df_FF$x),col='red')+
+    theme_void()
+
+}
+
+
+
+
+
+draw_animation<-function(n,time,start_Ang=0,end_ang=2*pi/3,z_tmp =-1,nframe=10){
+  i<-1
+  toSave<-list()
+  for (theta1 in seq(start_Ang,end_ang,length.out=nframe)){
+    p<-draw_loading_(n,theta = theta1,z_tmp = z_tmp)
+    if (end_ang>pi/2){
+      p<-p+xlim(n@L/n@H*cos(end_ang)+z_tmp,n@L/n@H+z_tmp)
+    }
+    toSave[[i]]<-p
+    suppressWarnings(print(p))
+    ggsave(paste('D:/new_file/ani/ani_',i,'.eps',sep = ''),plot=p,device = 'eps',width = 9.6, height = 5.6, units = "in")
+    i<-i+1
+  }
+  return(toSave)
+}
+
+
+draw_animation2<-function(n,time,start_Ang=0,end_ang=3*pi/4,z_tmp =-1,nframe=10){
+  i<-1
+  toSave<-list()
+  for (theta1 in seq(start_Ang,end_ang,length.out=nframe)){
+    p<-draw_geo_dataframe(n,theta = theta1,z_tmp = z_tmp)
+    if (end_ang>pi/2){
+      p<-p+xlim(n@L/n@H*cos(end_ang)+z_tmp,n@L/n@H+z_tmp)
+    }
+    toSave[[i]]<-p
+    suppressWarnings(print(p))
+    ggsave(paste('D:/new_file/ani/ani_',i,'.svg',sep = ''),plot=p,device = 'svg',width = 9.6, height = 5.6, units = "in")
+    i<-i+1
+  }
+  return(toSave)
+}
+
+
+
+
+draw_loading_dataframe<-function(n,type='SK',theta=pi/4,z_tmp=-1,timeline=seq(0,20,0.1)){
+  require('ggplot2')
+  df<-data.frame()
+  df1<-full_time_history(n,timeline)
+
+  for (time in timeline){
+
+    xscale<-1/n@H
+    yscale<-1/n@H
+
+
+    slab_up_x<-c(0,n@L)*xscale
+    slab_up_y<-c(n@D,n@D)*yscale
+
+    tmp<-rotation_plot(slab_up_x,slab_up_y,rep(z_tmp,length(slab_up_x)),theta = theta)
+    df<-rbind(df,data.frame(x=slab_up_x,y=slab_up_y,t=rep(z_tmp,length(slab_up_x)),xr=tmp$xr,yr=tmp$yr,theta=rep(theta,length(slab_up_x)),time=rep(time,length(slab_up_x)),group=rep('slab upper face',length(slab_up_x)),colour=rep('black',length(slab_up_x)),type=rep('path',length(slab_up_x)),ymin=rep(NA,length(slab_up_x)),ymax=rep(NA,length(slab_up_x))))
+
+
+    slab_dw_x<-c(0,n@L)*xscale
+    slab_dw_y<-c(0,0)*yscale
+    tmp<-rotation_plot(slab_dw_x,slab_dw_y,rep(z_tmp,length(slab_dw_x)),theta = theta)
+    df<-rbind(df,data.frame(x=slab_dw_x,y=slab_dw_y,t=rep(z_tmp,length(slab_dw_x)),xr=tmp$xr,yr=tmp$yr,theta=rep(theta,length(slab_dw_x)),time=rep(time,length(slab_dw_x)),group=rep('slab lower face',length(slab_dw_x)),colour=rep('black',length(slab_dw_x)),type=rep('path',length(slab_dw_x)),ymin=rep(NA,length(slab_dw_x)),ymax=rep(NA,length(slab_dw_x))))
+
+
+    joints_x<-c()
+    joints_y<-c()
+    g<-c()
+    if (type=='NSK'){
+      for (i in 0:n@N){
+        joints_x <-c(joints_x,c(0, 0,  0,   0,  0,  0)+i*n@L_slab)
+        joints_y <-c(joints_y,c(0,0.2, 0.3, 0.7,0.8,1)*n@D)
+        g<-c(g,rep(paste('joint',i),6))
+      }
+    }else if (type=='SK'){
+      for (i in 0:n@N){
+        joints_x <-c(joints_x,c(0,0  ,-0.2,-0.2,0  ,0)*n@D+i*n@L_slab)
+        joints_y <-c(joints_y,c(0,0.2, 0.3, 0.7,0.8,1)*n@D)
+        g<-c(g,rep(paste('joint',i),6))
+      }
+    }else{
+      print('use SK and NSK for slab with shearkeys and without them, respectivly')
+    }
+    joints_x<-joints_x*xscale
+    joints_y<-joints_y*yscale
+    tmp<-rotation_plot(joints_x,joints_y,rep(z_tmp,length(joints_x)),theta = theta)
+    df<-rbind(df,data.frame(x=joints_x,y=joints_y,t=rep(z_tmp,length(slab_dw_x)),xr=tmp$xr,yr=tmp$yr,theta=rep(theta,length(joints_x)),time=rep(time,length(joints_x)),group=g,colour=rep('gray',length(joints_x)),type=rep('path',length(joints_x)),ymin=rep(NA,length(joints_x)),ymax=rep(NA,length(joints_x))))
+
+
+    x_p<-n@Mesh[which.max(n@CpM_up)]*xscale
+    x_jet=seq(0.00,x_p,length.out=100)
+    y_jet=(-1/(x_p-0.00)^2*(x_jet-0.00)^2+1)*yscale/xscale
+    tmp<-rotation_plot(x_jet,y_jet,rep(z_tmp,length(x_jet)),theta = theta)
+    df<-rbind(df,data.frame(x=x_jet,y=y_jet,t=rep(z_tmp,length(x_jet)),xr=tmp$xr,yr=tmp$yr,theta=rep(theta,length(x_jet)),time=rep(time,length(x_jet)),group=rep('jet',length(x_jet)),colour=rep('blue',length(x_jet)),type=rep('path',length(x_jet)),ymin=rep(NA,length(x_jet)),ymax=rep(NA,length(x_jet))))
+
+    x_dam<-c( 0.0000,  0.0000, -0.0109, -0.0273, -0.0387, -0.0490, -0.0561, -0.0588, -0.0564, -0.0497, -0.0381, -0.0224,  0.0000,  0.0000, -0.0588, -0.0588, -0.0708, -0.0947, -0.1244, -0.1493, -0.1684, -0.1868, -0.1948, -0.2070, -0.2121, -0.2117, -0.2056, -0.1992, -0.0500, -0.0500,  0.0000)*n@L*xscale/4
+    y_dam<-c(-0.1961,  0.0000,  0.0666,  0.1496,  0.2214,  0.3088,  0.4036,  0.5098,  0.6110,  0.7036,  0.8022,  0.8965,  1.0000,  1.0588,  1.0588,  1.0000,  0.9720,  0.9118,  0.8265,  0.7425,  0.6646,  0.5708,  0.5192,  0.4066,  0.3055,  0.2088,  0.1050,  0.0442,  0.0196, -0.1961, -0.1961)*n@H*yscale
+    tmp<-rotation_plot(x_dam,y_dam,rep(z_tmp,length(x_dam)),theta = theta)
+    df<-rbind(df,data.frame(x=x_dam,y=y_dam,t=rep(z_tmp,length(x_dam)),xr=tmp$xr,yr=tmp$yr,theta=rep(theta,length(x_dam)),time=rep(time,length(x_dam)),group=rep('dam',length(x_dam)),colour=rep('black',length(x_dam)),type=rep('polygon',length(x_dam)),ymin=rep(NA,length(x_dam)),ymax=rep(NA,length(x_dam))))
+
+    tail_x<-c(n@L/n@H,n@L/n@H,n@L/n@H+0.025,n@L/n@H)
+    tail_y<-c(0,n@tw/n@H,0,0)
+    tmp<-rotation_plot(tail_x,tail_y,rep(z_tmp,length(tail_x)),theta = theta)
+    df<-rbind(df,data.frame(x=tail_x,y=tail_y,t=rep(z_tmp,length(tail_x)),xr=tmp$xr,yr=tmp$yr,theta=rep(theta,length(tail_x)),time=rep(time,length(tail_x)),group=rep('tailpond_dam',length(tail_x)),colour=rep('black',length(tail_x)),type=rep('path',length(tail_x)),ymin=rep(NA,length(tail_x)),ymax=rep(NA,length(tail_x))))
+
+    mean_x<-n@Mesh/n@H
+    mean_y<-(n@CpM_up)/98150/n@H
+    tmp<-rotation_plot(mean_x,mean_y,rep(z_tmp,length(mean_x)),theta = theta)
+    df<-rbind(df,data.frame(x=mean_x,y=mean_y,t=rep(z_tmp,length(mean_x)),xr=tmp$xr,yr=tmp$yr,theta=rep(theta,length(mean_x)),time=rep(time,length(mean_x)),group=rep('Mean_pressure',length(mean_x)),colour=rep('blue',length(mean_x)),type=rep('path',length(mean_x)),ymin=rep(NA,length(mean_x)),ymax=rep(NA,length(mean_x))))
+
+
+    rib_x<-n@Mesh/n@H
+    rib_y<-(n@CpM_up)/98150/n@H
+    tmp<-rotation_plot(rib_x,rib_y,rep(z_tmp,length(rib_x)),theta = theta)
+    rib_xr<-tmp$xr
+    rib_yr<-tmp$yr
+
+    rib_x<-n@Mesh/n@H
+    ymin <-(n@CpM_up-2.56*n@Cpf_up)/98150/n@H
+    tmp<-rotation_plot(rib_x,ymin,rep(z_tmp,length(rib_x)),theta = theta)
+    rib_xr<-tmp$xr
+    ymin<-tmp$yr
+
+    rib_x<-n@Mesh/n@H
+    ymax <-(n@CpM_up+2.56*n@Cpf_up)/98150/n@H
+    tmp<-rotation_plot(rib_x,ymax,rep(z_tmp,length(rib_x)),theta = theta)
+    rib_xr<-tmp$xr
+    ymax<-tmp$yr
+
+    df<-rbind(df,data.frame(x=rib_x,y=rib_y,t=rep(z_tmp,length(rib_x)),xr=rib_xr,yr=rib_yr,theta=rep(theta,length(rib_x)),time=rep(time,length(rib_x)),group=rep('fluc_pressure',length(rib_x)),colour=rep('gray',length(rib_x)),type=rep('ribbon',length(rib_x)),ymin=ymin,ymax=ymax))
+
+    df_F<-df1%>%filter(t==time)
+
+    tmp<-rotation_plot(df_F$x,df_F$P,df_F$t,theta = theta)
+
+    df<-rbind(df,data.frame(x=df_F$x,y=df_F$P,t=df_F$t,xr=tmp$xr,yr=tmp$yr,theta=rep(theta,length(df_F$x)),time=rep(time,length(df_F$x)),group=rep(paste('instant_pressure_at_t=',time,sep = ''),length(df_F$x)),colour=rep('red',length(df_F$x)),type=rep('path',length(df_F$x)),ymin=rep(NA,length(df_F$x)),ymax=rep(NA,length(df_F$x))))
+
+
+    df_F<-df1%>%filter(t<=time)%>%filter(x==n@Mesh[which.max(n@CpM_up)]/n@H)
+    tmp<-rotation_plot(df_F$x,df_F$P,df_F$t,theta = theta)
+    df<-rbind(df,data.frame(x=df_F$x,y=df_F$P,t=df_F$t,xr=tmp$xr,yr=tmp$yr,theta=rep(theta,length(df_F$x)),time=rep(time,length(df_F$x)),group=rep('instant_pressure_at_x=xp',length(df_F$x)),colour=rep('red',length(df_F$x)),type=rep('path2',length(df_F$x)),ymin=rep(NA,length(df_F$x)),ymax=rep(NA,length(df_F$x))))
+  }
+
+  for (i in 1:10)
+  df<-rbind(df,data.frame(x=df_F$x,y=df_F$P,t=df_F$t,xr=tmp$xr,yr=tmp$yr,theta=rep(theta,length(df_F$x)),time=rep(time+i,length(df_F$x)),group=rep('instant_pressure_at_x=xp',length(df_F$x)),colour=rep('red',length(df_F$x)),type=rep('path2',length(df_F$x)),ymin=rep(NA,length(df_F$x)),ymax=rep(NA,length(df_F$x))))
+
+
+
+
+
+  return(df)
+
+
+
+}
+
+draw_geo_dataframe<-function(n,theta=pi/4,z_tmp=-1,t=0){
+  df<-draw_loading_dataframe(n,theta=theta,z_tmp=z_tmp,time=t)
+  p1<-ggplot(data=df,aes(x=xr,y=yr,group=group,ymin =ymin, ymax = ymax),col=colour)+
+    geom_path(data=df%>%filter(type=='path'))+
+    geom_polygon(data=df%>%filter(type=='polygon'),col='black',fill='gray')+
+    geom_ribbon(data=df%>%filter(type=='ribbon'),alpha=0.2)+
+    theme_void()+
+    xlab('')+
+    ylab('')+
+    ylim(-1,1.1)+
+    theme(legend.position="none")
+
+
+
+  return(p1)
+}
+
+
+
+save_loading_animation<-function(){
+
+}
